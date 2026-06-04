@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useMemo, useTransition } from 'react';
+import { useState, useMemo, useTransition, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { Plus, Search, Trash2, Edit2, ArrowRight, Download, MessageCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { updateEnquiry, deleteEnquiry } from '@/lib/actions/enquiries';
@@ -21,7 +22,9 @@ interface Props {
 
 export function EnquiriesClient({ initialEnquiries, users, currentUser }: Props) {
   const today = todayISO();
-  const [enquiries] = useState(initialEnquiries);
+  const router = useRouter();
+  const [enquiries, setEnquiries] = useState(initialEnquiries);
+  useEffect(() => { setEnquiries(initialEnquiries); }, [initialEnquiries]);
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterSource, setFilterSource] = useState('all');
@@ -62,7 +65,8 @@ export function EnquiriesClient({ initialEnquiries, users, currentUser }: Props)
     if (status === 'lost') { setLostDialog({ enquiry: e, reason: '' }); return; }
     startTransition(async () => {
       const result = await updateEnquiry(e.id, { status: status as Enquiry['status'] });
-      if (!result.success) toast.error(result.error);
+      if (!result.success) { toast.error(result.error); return; }
+      router.refresh();
     });
   };
 
@@ -73,6 +77,7 @@ export function EnquiriesClient({ initialEnquiries, users, currentUser }: Props)
       if (!result.success) { toast.error(result.error); return; }
       setLostDialog(null);
       toast.success('Marked as lost');
+      router.refresh();
     });
   };
 
@@ -82,6 +87,7 @@ export function EnquiriesClient({ initialEnquiries, users, currentUser }: Props)
       const result = await deleteEnquiry(id);
       if (!result.success) { toast.error(result.error); return; }
       toast.success('Enquiry deleted');
+      router.refresh();
     });
   };
 
@@ -192,9 +198,7 @@ export function EnquiriesClient({ initialEnquiries, users, currentUser }: Props)
                     <td className="p-3 font-mono text-xs text-stone-500">{e.enquiryNumber}</td>
                     <td className="p-3">
                       <div className="font-medium">{e.name || '(No name)'}</div>
-                      <a href={buildWaLink(e.phone, WA_TEMPLATES.enquiryGreeting(e.name))} target="_blank" rel="noopener noreferrer" className="text-xs text-stone-500 hover:text-green-700 flex items-center gap-0.5">
-                        <MessageCircle size={10} /> {e.phone}
-                      </a>
+                      <div className="text-xs text-stone-500">{e.phone}</div>
                       {e.preferredDates && <div className="text-xs text-stone-400 italic">{e.preferredDates}</div>}
                     </td>
                     <td className="p-3">

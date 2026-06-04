@@ -4,6 +4,7 @@ import { useState, useMemo } from 'react';
 import { Search, FileText, Printer } from 'lucide-react';
 import { fmtDate } from '@/lib/utils/date';
 import { buildWaLink, WA_TEMPLATES } from '@/lib/constants/whatsapp';
+import { getVoucherShareUrl } from '@/lib/actions/vouchers';
 import type { Booking } from '@/lib/types/booking';
 import type { UserRole } from '@/lib/types/profile';
 import { MessageCircle } from 'lucide-react';
@@ -27,6 +28,12 @@ export function VouchersClient({ initialBookings }: Props) {
   const handlePrint = (b: Booking) => {
     const win = window.open(`/api/print/voucher?bookingId=${b.id}`, '_blank');
     win?.addEventListener('load', () => setTimeout(() => win.print(), 300));
+  };
+
+  const handleWhatsApp = async (b: Booking) => {
+    const voucherUrl = await getVoucherShareUrl(b.id);
+    const msg = WA_TEMPLATES.bookingConfirmation(b.guestName, b.confirmationNumber, fmtDate(b.arrival), voucherUrl);
+    window.open(buildWaLink(b.contactNumber, msg), '_blank');
   };
 
   return (
@@ -63,10 +70,10 @@ export function VouchersClient({ initialBookings }: Props) {
                 <button onClick={() => handlePrint(b)} className="flex-1 flex items-center justify-center gap-1.5 text-xs bg-emerald-900 text-amber-100 py-1.5 hover:bg-emerald-800 transition tracking-wider">
                   <Printer size={12} /> PRINT VOUCHER
                 </button>
-                <a href={buildWaLink(b.contactNumber, WA_TEMPLATES.bookingConfirmation(b.guestName, b.confirmationNumber, fmtDate(b.arrival)))} target="_blank" rel="noopener noreferrer"
+                <button onClick={() => handleWhatsApp(b)}
                   className="flex items-center justify-center gap-1 text-xs border border-green-600 text-green-700 px-3 py-1.5 hover:bg-green-50 transition">
                   <MessageCircle size={12} /> WA
-                </a>
+                </button>
               </div>
             </div>
           ))

@@ -16,7 +16,19 @@ export const EnquirySchema = z.object({
   createdBy: z.string().min(1),
 });
 
-export const UpdateEnquirySchema = EnquirySchema.partial().extend({
+export const UpdateEnquirySchema = z.object({
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  name: z.string().optional(),
+  phone: z.string().min(1).optional(),
+  email: z.string().email().optional().or(z.literal('')).optional(),
+  source: z.string().optional(),
+  enquiryType: z.string().optional(),
+  numberOfRooms: z.string().optional(),
+  preferredDates: z.string().optional(),
+  status: z.enum(['new', 'in_progress', 'booked', 'lost']).optional(),
+  nextAction: z.string().optional(),
+  followupDate: z.string().nullable().optional(),
+  notes: z.string().optional(),
   lostReason: z.string().optional(),
   lostAt: z.string().nullable().optional(),
 });

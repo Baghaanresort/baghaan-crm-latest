@@ -40,8 +40,10 @@ export function NavTabs() {
     return ALL_TABS.filter((tab) => tab.allowedFn(permissions));
   }, [permissions]);
 
+  const SHORT_LABELS: Record<string, string> = { corporate: 'Corporate' };
+
   return (
-    <nav className="max-w-7xl mx-auto px-6 flex gap-1 overflow-x-auto">
+    <nav className="max-w-7xl mx-auto px-4 flex">
       {visibleTabs.map(({ key, label, href }) => {
         const Icon = TAB_ICONS[key] ?? BarChart3;
         const isActive = pathname === href || pathname.startsWith(href + '/');
@@ -50,14 +52,14 @@ export function NavTabs() {
             key={key}
             href={href}
             prefetch
-            className={`px-4 py-2.5 text-sm flex items-center gap-2 transition border-b-2 whitespace-nowrap ${
+            className={`px-3 py-2.5 text-sm flex items-center gap-1.5 transition border-b-2 whitespace-nowrap ${
               isActive
                 ? 'border-amber-400 text-amber-200'
                 : 'border-transparent text-stone-300 hover:text-stone-50'
             }`}
           >
-            <Icon size={14} />
-            {label}
+            <Icon size={14} aria-hidden="true" />
+            {SHORT_LABELS[key] ?? label}
           </Link>
         );
       })}

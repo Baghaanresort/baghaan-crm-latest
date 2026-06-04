@@ -55,6 +55,7 @@ export function EnquiryModal({ enquiry, users, currentUser, onClose }: Props) {
         if (!result.success) { toast.error(result.error); return; }
         toast.success(`Enquiry #${result.data.enquiryNumber} created`);
       }
+      router.refresh();
       onClose();
     });
   };

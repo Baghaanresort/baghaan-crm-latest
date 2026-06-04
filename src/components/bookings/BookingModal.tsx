@@ -143,11 +143,11 @@ export function BookingModal({ booking, users, currentUser, existingBookings, pr
           {/* Dates */}
           <Section title="Stay Details">
             <div className="grid grid-cols-5 gap-3">
-              <Field label="Arrival" type="date" value={form.arrival} onChange={v => update('arrival', v)} />
-              <Field label="Departure" type="date" value={form.departure} onChange={v => update('departure', v)} />
+              <Field label="Arrival" type="date" value={form.arrival} min={today} onChange={v => update('arrival', v)} />
+              <Field label="Departure" type="date" value={form.departure} min={form.arrival} onChange={v => update('departure', v)} />
               <Field label="Nights" type="number" value={form.nights} readOnly />
-              <Field label="Adults" type="number" value={form.adults} onChange={v => update('adults', Number(v))} />
-              <Field label="Children" type="number" value={form.children} onChange={v => update('children', Number(v))} />
+              <Field label="Adults" type="number" value={form.adults} min={0} onChange={v => update('adults', Number(v))} />
+              <Field label="Children" type="number" value={form.children} min={0} onChange={v => update('children', Number(v))} />
             </div>
           </Section>
 
@@ -241,9 +241,9 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function Field({ label, value, onChange, type = 'text', textarea, rows = 3, readOnly }: {
+function Field({ label, value, onChange, type = 'text', textarea, rows = 3, readOnly, min }: {
   label: string; value: string | number | null; onChange?: (v: string) => void;
-  type?: string; textarea?: boolean; rows?: number; readOnly?: boolean;
+  type?: string; textarea?: boolean; rows?: number; readOnly?: boolean; min?: string | number;
 }) {
   return (
     <div>
@@ -252,7 +252,7 @@ function Field({ label, value, onChange, type = 'text', textarea, rows = 3, read
         <textarea value={value ?? ''} onChange={e => onChange?.(e.target.value)} rows={rows} readOnly={readOnly}
           className={`w-full px-3 py-2 border border-stone-300 text-sm outline-none focus:border-emerald-700 ${readOnly ? 'bg-stone-100' : 'bg-white'}`} />
       ) : (
-        <input type={type} value={value ?? ''} onChange={e => onChange?.(e.target.value)} readOnly={readOnly}
+        <input type={type} value={value ?? ''} onChange={e => onChange?.(e.target.value)} readOnly={readOnly} min={min}
           className={`w-full px-3 py-2 border border-stone-300 text-sm outline-none focus:border-emerald-700 ${readOnly ? 'bg-stone-100' : 'bg-white'}`} />
       )}
     </div>

@@ -14,6 +14,21 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: 'Lora', Georgia, serif;
+  overflow-x: hidden;
+}
+
+html {
+  overflow-x: hidden;
+}
+
+/* Hide number input spinners */
+input[type='number']::-webkit-inner-spin-button,
+input[type='number']::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type='number'] {
+  -moz-appearance: textfield;
 }
 
 /* Print utilities */

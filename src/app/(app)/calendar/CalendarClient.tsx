@@ -1,159 +1,360 @@
 'use client';
 
-import { useState, useMemo } from 'react';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { ROOM_INVENTORY } from '@/lib/constants/rooms';
-import { datesInRange, isoDate } from '@/lib/utils/date';
+import { useState, useMemo, useCallback } from 'react';
+import { ROOM_INVENTORY, getRoomCategory } from '@/lib/constants/rooms';
+import { isoDate, daysBetween } from '@/lib/utils/date';
 import type { Booking } from '@/lib/types/booking';
+import type { RoomCategory } from '@/lib/constants/rooms';
+import type { MaintenanceBlock } from './page';
 
-const ALL_ROOMS = Object.entries(ROOM_INVENTORY).flatMap(([cat, rooms]) => rooms.map(r => ({ room: r, cat })));
+import { OccupancyHeader } from '@/components/calendar/OccupancyHeader';
+import { OccupancyKPIs } from '@/components/calendar/OccupancyKPIs';
+import { OccupancyFilters } from '@/components/calendar/OccupancyFilters';
+import type { RoomTypeFilter, StatusFilter } from '@/components/calendar/OccupancyFilters';
+import { OccupancyHeatmap } from '@/components/calendar/OccupancyHeatmap';
+import { CalendarGrid } from '@/components/calendar/CalendarGrid';
+import { BookingTooltip } from '@/components/calendar/BookingTooltip';
+import type { TooltipData } from '@/components/calendar/BookingTooltip';
+import { LegendPanel } from '@/components/calendar/LegendPanel';
 
-type CellStatus = 'confirmed' | 'hold' | 'pending' | 'today' | null;
+const CELL_WIDTH = 36;
+const ROW_HEIGHT = 40;
+const SIDEBAR_WIDTH = 160;
+const TOTAL_ROOMS = 54;
 
-function getCellStyle(status: CellStatus): string {
-  if (status === 'confirmed') return 'bg-emerald-100 border-emerald-300 text-emerald-900';
-  if (status === 'hold') return 'border-amber-300' + ' ' + 'bg-amber-50';
-  if (status === 'pending') return 'border-purple-300 bg-purple-50';
-  if (status === 'today') return 'bg-amber-200 border-amber-400';
-  return '';
+const DAY_ABBRS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+function getCatBadge(cat: RoomCategory): string {
+  if (cat === 'Kesar Khema') return 'KK';
+  if (cat === 'Orchard Cottage') return 'OC';
+  if (cat === 'Premium Orchard Cottage') return 'POC';
+  if (cat === 'Kothi') return 'K';
+  return 'R';
+}
+
+function getShortRoomName(room: string, cat: RoomCategory): string {
+  if (cat === 'Kesar Khema') return room.replace('Kesar Khema Room ', 'KK-');
+  if (cat === 'Orchard Cottage') return room.replace('Orchard Cottage ', 'OC-');
+  if (cat === 'Premium Orchard Cottage') return room.replace('Premium Orchard Cottage ', 'POC-');
+  if (cat === 'Kothi') {
+    if (room.includes('Dasheri')) return 'Dasheri 2BR';
+    if (room.includes('Amarpali')) return 'Amarpali 3BR';
+  }
+  return room;
 }
 
 interface Props {
   initialBookings: Booking[];
+  maintenanceBlocks: MaintenanceBlock[];
 }
 
-export function CalendarClient({ initialBookings: bookings }: Props) {
+export function CalendarClient({ initialBookings: bookings, maintenanceBlocks }: Props) {
   const today = isoDate(new Date());
-  const [monthOffset, setMonthOffset] = useState(0);
-  const [tooltipBooking, setTooltipBooking] = useState<Booking | null>(null);
 
+  const [monthOffset, setMonthOffset] = useState(0);
+  const [roomTypeFilter, setRoomTypeFilter] = useState<RoomTypeFilter>('All');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('All');
+  const [guestSearch, setGuestSearch] = useState('');
+  const [tooltip, setTooltip] = useState<{ data: TooltipData; x: number; y: number } | null>(null);
+
+  // Month calculation
   const { year, month, days, monthLabel } = useMemo(() => {
     const d = new Date();
     d.setDate(1);
     d.setMonth(d.getMonth() + monthOffset);
-    const year = d.getFullYear();
-    const month = d.getMonth();
-    const last = new Date(year, month + 1, 0).getDate();
+    const yr = d.getFullYear();
+    const mo = d.getMonth();
+    const lastDay = new Date(yr, mo + 1, 0).getDate();
+    const daysArr = Array.from({ length: lastDay }, (_, i) => {
+      const dayNum = i + 1;
+      const date = `${yr}-${String(mo + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
+      const dow = new Date(yr, mo, dayNum).getDay();
+      return {
+        date,
+        dayNum,
+        dayAbbr: DAY_ABBRS[dow] ?? 'Sun',
+        isToday: date === today,
+        isWeekend: dow === 0 || dow === 6,
+      };
+    });
     return {
-      year, month,
-      days: Array.from({ length: last }, (_, i) => i + 1),
+      year: yr,
+      month: mo,
+      days: daysArr,
       monthLabel: d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
     };
-  }, [monthOffset]);
+  }, [monthOffset, today]);
 
-  // Build room -> date -> booking map
-  const grid = useMemo(() => {
-    const m: Record<string, Record<string, Booking>> = {};
-    bookings.forEach(b => {
-      const range = datesInRange(b.arrival, b.departure);
-      range.forEach(d => {
-        (b.rooms ?? []).forEach(r => {
-          if (!m[r]) m[r] = {};
-          m[r]![d] = b;
-        });
+  // Date index map: date -> index in days array
+  const dateIndexMap = useMemo(() => {
+    const m = new Map<string, number>();
+    days.forEach((d, i) => m.set(d.date, i));
+    return m;
+  }, [days]);
+
+  // All rooms flat
+  const allRoomRows = useMemo(() => {
+    return Object.entries(ROOM_INVENTORY).flatMap(([cat, rooms]) =>
+      rooms.map((room) => {
+        const catTyped = cat as RoomCategory;
+        return {
+          room,
+          cat: catTyped,
+          shortName: getShortRoomName(room, catTyped),
+          catBadge: getCatBadge(catTyped),
+          catColor: catTyped,
+        };
+      })
+    );
+  }, []);
+
+  // Filtered bookings based on guest search and status
+  const filteredBookings = useMemo(() => {
+    return bookings.filter((b) => {
+      if (b.status === 'cancelled') return false;
+      if (statusFilter === 'maintenance') return false;
+      if (statusFilter !== 'All' && b.status !== statusFilter) return false;
+      if (guestSearch.trim()) {
+        const q = guestSearch.toLowerCase();
+        if (
+          !b.guestName.toLowerCase().includes(q) &&
+          !b.confirmationNumber.toLowerCase().includes(q)
+        ) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }, [bookings, statusFilter, guestSearch]);
+
+  // Build bookingsByRoom for current month
+  const bookingsByRoom = useMemo(() => {
+    const map = new Map<string, Array<{ booking: Booking; startIdx: number; nights: number }>>();
+
+    filteredBookings.forEach((booking) => {
+      (booking.rooms ?? []).forEach((room) => {
+        // Clamp booking to visible month
+        const arrivalDate = booking.arrival < days[0]!.date ? days[0]!.date : booking.arrival;
+        const departureDate =
+          booking.departure > days[days.length - 1]!.date
+            ? days[days.length - 1]!.date
+            : booking.departure;
+
+        const startIdx = dateIndexMap.get(arrivalDate);
+        if (startIdx === undefined) return;
+
+        // Calculate visible nights
+        const endIdx = dateIndexMap.get(departureDate);
+        const visibleNights =
+          endIdx !== undefined
+            ? endIdx - startIdx
+            : days.length - startIdx;
+
+        if (visibleNights <= 0) return;
+
+        // Check if booking overlaps with this month
+        if (booking.departure <= days[0]!.date || booking.arrival > days[days.length - 1]!.date) return;
+
+        const existing = map.get(room) ?? [];
+        existing.push({ booking, startIdx, nights: visibleNights });
+        map.set(room, existing);
       });
     });
-    return m;
-  }, [bookings]);
 
-  const getStatus = (b: Booking | undefined): CellStatus => {
-    if (!b) return null;
-    const bookingPayments = [] as never[];
-    if (b.status === 'hold') return 'hold';
-    return 'confirmed';
-  };
+    return map;
+  }, [filteredBookings, days, dateIndexMap]);
+
+  // Build maintenanceByRoom for current month
+  const maintenanceByRoom = useMemo(() => {
+    const map = new Map<string, Array<{ block: MaintenanceBlock; startIdx: number; nights: number }>>();
+
+    if (statusFilter === 'confirmed' || statusFilter === 'hold') return map;
+
+    maintenanceBlocks.forEach((block) => {
+      if (block.dateTo <= days[0]!.date || block.dateFrom > days[days.length - 1]!.date) return;
+
+      const arrivalDate = block.dateFrom < days[0]!.date ? days[0]!.date : block.dateFrom;
+      const departureDate =
+        block.dateTo > days[days.length - 1]!.date
+          ? days[days.length - 1]!.date
+          : block.dateTo;
+
+      const startIdx = dateIndexMap.get(arrivalDate);
+      if (startIdx === undefined) return;
+
+      const endDate = new Date(departureDate);
+      const endIdx = dateIndexMap.get(isoDate(endDate));
+      const visibleNights =
+        endIdx !== undefined
+          ? endIdx - startIdx
+          : days.length - startIdx;
+
+      if (visibleNights <= 0) return;
+
+      const existing = map.get(block.roomName) ?? [];
+      existing.push({ block, startIdx, nights: visibleNights });
+      map.set(block.roomName, existing);
+    });
+
+    return map;
+  }, [maintenanceBlocks, days, dateIndexMap, statusFilter]);
+
+  // Filter rooms based on filters
+  const filteredRooms = useMemo(() => {
+    return allRoomRows.filter((rr) => {
+      if (roomTypeFilter !== 'All' && rr.cat !== roomTypeFilter) return false;
+
+      // If status filter is maintenance, only show rooms with maintenance blocks
+      if (statusFilter === 'maintenance') {
+        return maintenanceByRoom.has(rr.room);
+      }
+
+      // If guest search, only show rooms with matching bookings
+      if (guestSearch.trim()) {
+        return bookingsByRoom.has(rr.room);
+      }
+
+      return true;
+    });
+  }, [allRoomRows, roomTypeFilter, statusFilter, guestSearch, maintenanceByRoom, bookingsByRoom]);
+
+  // KPI calculations
+  const kpis = useMemo(() => {
+    // Today's occupied rooms
+    const todayBookedRooms = new Set<string>();
+    const todayCheckIns: Set<string> = new Set();
+    const todayCheckOuts: Set<string> = new Set();
+    let revenueImpact = 0;
+
+    bookings.forEach((b) => {
+      if (b.status === 'cancelled') return;
+      // Month revenue
+      if (b.arrival.startsWith(`${year}-${String(month + 1).padStart(2, '0')}`)) {
+        revenueImpact += b.totalAmount ?? 0;
+      }
+      // Today occupancy
+      (b.rooms ?? []).forEach((room) => {
+        if (b.arrival < today && b.departure > today) {
+          todayBookedRooms.add(room);
+        }
+        if (b.arrival === today) {
+          todayCheckIns.add(b.id);
+          todayBookedRooms.add(room);
+        }
+        if (b.departure === today) {
+          todayCheckOuts.add(b.id);
+        }
+      });
+    });
+
+    // Maintenance rooms (any active today)
+    const maintenanceRooms = new Set<string>();
+    maintenanceBlocks.forEach((block) => {
+      if (block.dateFrom <= today && block.dateTo > today) {
+        maintenanceRooms.add(block.roomName);
+      }
+    });
+
+    const occupiedRooms = todayBookedRooms.size;
+    const occupancyRate = Math.round((occupiedRooms / TOTAL_ROOMS) * 100);
+
+    return {
+      occupancyRate,
+      occupiedRooms,
+      totalRooms: TOTAL_ROOMS,
+      todayCheckIns: todayCheckIns.size,
+      todayCheckOuts: todayCheckOuts.size,
+      revenueImpact,
+      maintenanceRooms: maintenanceRooms.size,
+    };
+  }, [bookings, maintenanceBlocks, today, year, month]);
+
+  // Per-day occupancy for heatmap
+  const dayOccupancy = useMemo(() => {
+    return days.map((day) => {
+      const bookedRooms = new Set<string>();
+      bookings.forEach((b) => {
+        if (b.status === 'cancelled') return;
+        if (b.arrival <= day.date && b.departure > day.date) {
+          (b.rooms ?? []).forEach((r) => bookedRooms.add(r));
+        }
+      });
+      const pct = Math.round((bookedRooms.size / TOTAL_ROOMS) * 100);
+      return { date: day.date, dayNum: day.dayNum, pct };
+    });
+  }, [bookings, days]);
+
+  const handleTooltip = useCallback(
+    (data: TooltipData | null, x: number, y: number) => {
+      if (!data) {
+        setTooltip(null);
+      } else {
+        setTooltip({ data, x, y });
+      }
+    },
+    []
+  );
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-6 pb-4 border-b border-stone-300">
-        <div>
-          <h2 className="text-2xl text-emerald-900" style={{ fontFamily: "'Cormorant Garamond', serif", fontWeight: 600 }}>Occupancy Calendar</h2>
-          <p className="text-sm text-stone-500 italic">{monthLabel}</p>
+    <div style={{ backgroundColor: '#F8F7F4', minHeight: '100%' }}>
+      <OccupancyHeader
+        monthLabel={monthLabel}
+        onPrev={() => setMonthOffset((m) => m - 1)}
+        onNext={() => setMonthOffset((m) => m + 1)}
+        onToday={() => setMonthOffset(0)}
+      />
+
+      <OccupancyKPIs kpis={kpis} />
+
+      <OccupancyFilters
+        roomTypeFilter={roomTypeFilter}
+        statusFilter={statusFilter}
+        guestSearch={guestSearch}
+        onRoomTypeChange={setRoomTypeFilter}
+        onStatusChange={setStatusFilter}
+        onGuestSearchChange={setGuestSearch}
+      />
+
+      {/* Calendar grid with heatmap */}
+      <div className="overflow-x-auto" style={{ position: 'relative' }}>
+        {/* Heatmap row */}
+        <div style={{ minWidth: SIDEBAR_WIDTH + days.length * CELL_WIDTH }}>
+          <OccupancyHeatmap
+            days={dayOccupancy}
+            cellWidth={CELL_WIDTH}
+            sidebarWidth={SIDEBAR_WIDTH}
+          />
         </div>
-        <div className="flex gap-2">
-          <button onClick={() => setMonthOffset(m => m - 1)} className="p-2 border border-stone-300 hover:bg-stone-100 rounded"><ChevronLeft size={16} /></button>
-          <button onClick={() => setMonthOffset(0)} className="px-3 py-2 border border-stone-300 hover:bg-stone-100 text-sm">Today</button>
-          <button onClick={() => setMonthOffset(m => m + 1)} className="p-2 border border-stone-300 hover:bg-stone-100 rounded"><ChevronRight size={16} /></button>
+
+        {/* Main grid */}
+        <CalendarGrid
+          rooms={filteredRooms}
+          days={days}
+          bookingsByRoom={bookingsByRoom}
+          maintenanceByRoom={maintenanceByRoom}
+          cellWidth={CELL_WIDTH}
+          rowHeight={ROW_HEIGHT}
+          sidebarWidth={SIDEBAR_WIDTH}
+          onTooltip={handleTooltip}
+        />
+      </div>
+
+      {filteredRooms.length === 0 && (
+        <div className="flex items-center justify-center py-16 text-stone-400 text-sm italic">
+          No rooms match the current filters.
         </div>
-      </div>
+      )}
 
-      <div className="overflow-x-auto">
-        <table className="text-xs border-collapse" style={{ minWidth: `${140 + days.length * 28}px` }}>
-          <thead>
-            <tr className="bg-emerald-900 text-amber-100">
-              <th className="sticky left-0 bg-emerald-900 text-left px-3 py-2 w-36 z-20">Room</th>
-              {days.map(d => {
-                const iso = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-                const isToday = iso === today;
-                return (
-                  <th key={d} className={`text-center border-l border-emerald-800 w-7 py-2 ${isToday ? 'bg-amber-500 text-white' : ''}`}>
-                    {d}
-                  </th>
-                );
-              })}
-              <th className="sticky right-0 bg-emerald-900 text-center px-2 py-2 z-10">Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            {Object.entries(ROOM_INVENTORY).flatMap(([cat, rooms]) => [
-              // Category header row
-              <tr key={`cat-${cat}`} className="bg-stone-100">
-                <td colSpan={days.length + 2} className="sticky left-0 px-3 py-1.5 font-medium text-emerald-900 uppercase tracking-wider bg-stone-100 z-10">
-                  {cat}
-                </td>
-              </tr>,
-              // Room rows
-              ...rooms.map(room => {
-                const roomGrid = grid[room] ?? {};
-                const totalBooked = days.filter(d => {
-                  const iso = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-                  return !!roomGrid[iso];
-                }).length;
+      <LegendPanel />
 
-                return (
-                  <tr key={room} className="hover:bg-stone-50">
-                    <td className="sticky left-0 bg-white border-b border-stone-100 px-3 py-1.5 text-stone-700 z-10 whitespace-nowrap">
-                      {room.replace(/^.+ /, '') /* show number/name only */}
-                      <span className="text-stone-400 text-xs ml-1">{room.includes('Khema') ? 'KK' : room.includes('Premium') ? 'POC' : room.includes('Orchard') ? 'OC' : 'K'}</span>
-                    </td>
-                    {days.map(d => {
-                      const iso = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-                      const b = roomGrid[iso];
-                      const isToday = iso === today;
-                      let cellClass = `border-l border-stone-100 text-center cursor-default `;
-                      if (b) {
-                        if (b.status === 'hold') cellClass += 'bg-amber-50 border-amber-200';
-                        else cellClass += 'bg-emerald-100 border-emerald-200';
-                      } else if (isToday) {
-                        cellClass += 'bg-amber-100';
-                      }
-                      return (
-                        <td key={d} className={cellClass} title={b ? `${b.guestName} (${b.confirmationNumber})` : ''}>
-                          {b ? (
-                            <div className={`w-full h-full py-1 text-center ${b.status === 'hold' ? 'text-amber-700' : 'text-emerald-700'}`}>
-                              ●
-                            </div>
-                          ) : isToday ? '·' : ''}
-                        </td>
-                      );
-                    })}
-                    <td className="sticky right-0 bg-white border-l border-stone-200 text-center px-1 z-10 font-medium text-stone-700">
-                      {totalBooked || ''}
-                    </td>
-                  </tr>
-                );
-              }),
-            ])}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Legend */}
-      <div className="mt-4 flex items-center gap-6 text-xs text-stone-600 flex-wrap">
-        <div className="flex items-center gap-2"><span className="inline-block w-4 h-4 bg-emerald-100 border border-emerald-200" /><span>Confirmed</span></div>
-        <div className="flex items-center gap-2"><span className="inline-block w-4 h-4 bg-amber-50 border border-amber-300" /><span>On Hold</span></div>
-        <div className="flex items-center gap-2"><span className="inline-block w-4 h-4 bg-amber-100 border border-amber-200" /><span>Today</span></div>
-      </div>
+      {/* Tooltip */}
+      {tooltip && (
+        <BookingTooltip
+          data={tooltip.data}
+          x={tooltip.x}
+          y={tooltip.y}
+        />
+      )}
     </div>
   );
 }

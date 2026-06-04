@@ -48,6 +48,33 @@ function revalidateAll() {
   revalidatePath('/vouchers');
 }
 
+async function checkRoomConflict(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  rooms: string[],
+  arrival: string,
+  departure: string,
+  excludeBookingId?: string
+): Promise<string | null> {
+  if (!rooms.length) return null;
+
+  let query = supabase
+    .from('bookings')
+    .select('confirmation_number, guest_name, arrival, departure, rooms')
+    .neq('status', 'cancelled')
+    .lt('arrival', departure)
+    .gt('departure', arrival)
+    .overlaps('rooms', rooms);
+
+  if (excludeBookingId) query = query.neq('id', excludeBookingId);
+
+  const { data, error } = await query.limit(1);
+  if (error) { console.error('[checkRoomConflict]', error); return null; }
+  if (!data || data.length === 0) return null;
+
+  const c = data[0] as { confirmation_number: string; guest_name: string; arrival: string; departure: string };
+  return `Room already booked: ${c.guest_name} (${c.confirmation_number}) is in one of these rooms from ${c.arrival} to ${c.departure}.`;
+}
+
 // ---------- createBooking ----------
 
 export async function createBooking(
@@ -62,6 +89,9 @@ export async function createBooking(
   if (!['Sales', 'Front Office', 'Admin'].includes(actor.role)) {
     return err('Insufficient permissions');
   }
+
+  const conflict = await checkRoomConflict(supabase, parsed.data.rooms ?? [], parsed.data.arrival, parsed.data.departure);
+  if (conflict) return err(conflict);
 
   // Auto-match or create guest
   const guestId = await resolveGuestId(supabase, {
@@ -131,6 +161,9 @@ export async function createBlockedRoom(
   if (!['Sales', 'Front Office', 'Admin'].includes(actor.role)) {
     return err('Insufficient permissions');
   }
+
+  const blockConflict = await checkRoomConflict(supabase, parsed.data.rooms ?? [], parsed.data.arrival, parsed.data.departure);
+  if (blockConflict) return err(blockConflict);
 
   const counter = await getCounter(supabase);
   const newCounter = counter + 1;
@@ -213,6 +246,15 @@ export async function updateBooking(
     .eq('id', bookingId)
     .single();
   if (fetchErr || !current) return err('Booking not found');
+
+  // Check conflicts only when rooms or dates are changing
+  if (input.rooms || input.arrival || input.departure) {
+    const rooms = input.rooms ?? dbToBooking(current).rooms ?? [];
+    const arrival = input.arrival ?? current['arrival'] as string;
+    const departure = input.departure ?? current['departure'] as string;
+    const updateConflict = await checkRoomConflict(supabase, rooms, arrival, departure, bookingId);
+    if (updateConflict) return err(updateConflict);
+  }
 
   const updates = Object.fromEntries(
     Object.entries(bookingToDb(input as Booking)).filter(([, v]) => v !== undefined)
