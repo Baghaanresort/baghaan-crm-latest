@@ -15,7 +15,7 @@ export default async function CorporatePage() {
   const [bookings, payments, usersData] = await Promise.all([
     getBookings(),
     getPayments(),
-    supabase.from('profiles').select('name, role'),
+    supabase.from('profiles').select('name, role').in('role', ['Admin', 'Sales', 'Accounts', 'Front Office']),
   ]);
 
   const corporateBookings = bookings.filter(b => b.bookingType === 'corporate');

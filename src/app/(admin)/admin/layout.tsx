@@ -17,7 +17,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   if (!profile || (profile.role as UserRole) !== 'Admin') redirect('/dashboard');
 
   return (
-    <div className="min-h-screen bg-stone-100" style={{ fontFamily: "'Lora', Georgia, serif" }}>
+    <div className="min-h-screen bg-stone-100">
       <header className="bg-stone-900 text-stone-50 border-b-4 border-amber-600">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-6">

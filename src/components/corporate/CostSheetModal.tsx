@@ -108,7 +108,7 @@ export function CostSheetModal({ booking, currentUser, onClose }: Props) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto" style={{ fontFamily: "'Lora', Georgia, serif" }}>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto">
       <div className="bg-stone-50 max-w-5xl w-full my-8 max-h-[90vh] overflow-y-auto">
         <div className="sticky top-0 bg-stone-800 text-white px-6 py-4 flex justify-between items-center z-10">
           <div>

@@ -33,7 +33,7 @@ export function ProformaInvoicePreview({ booking, onClose }: Props) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 overflow-y-auto" style={{ fontFamily: "'Lora', Georgia, serif" }}>
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 overflow-y-auto">
       <div className="bg-white max-w-3xl w-full my-8">
         <div className="sticky top-0 bg-purple-700 text-white px-6 py-4 flex justify-between items-center z-10">
           <div><h2 style={{ fontFamily: "'Cormorant Garamond', serif", fontWeight: 600 }} className="text-xl tracking-wider">Proforma Invoice</h2><p className="text-xs text-purple-100 font-mono">{pi.piNumber}</p></div>

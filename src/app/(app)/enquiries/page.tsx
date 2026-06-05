@@ -13,7 +13,7 @@ export default async function EnquiriesPage() {
 
   const [enquiries, usersData] = await Promise.all([
     getEnquiries(),
-    supabase.from('profiles').select('name, role'),
+    supabase.from('profiles').select('name, role').in('role', ['Admin', 'Sales', 'Accounts', 'Front Office']),
   ]);
 
   return (

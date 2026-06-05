@@ -88,7 +88,7 @@ export function FinalBillModal({ booking, currentUser, payments, onClose }: Prop
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto" style={{ fontFamily: "'Lora', Georgia, serif" }}>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto">
       <div className="bg-stone-50 max-w-2xl w-full my-8">
         <div className="sticky top-0 bg-blue-700 text-white px-6 py-4 flex justify-between items-center z-10">
           <div>

@@ -67,8 +67,8 @@ export function BookingsClient({ initialBookings, initialPayments, users, curren
   const effStatus = (b: Booking) => getEffectiveStatus(b, payments);
 
   const agentNames = useMemo(() =>
-    Array.from(new Set([...users.map(u => u.name), ...bookings.map(b => b.createdBy)])).filter(Boolean),
-    [users, bookings]
+    Array.from(new Set(users.map(u => u.name))).filter(Boolean),
+    [users]
   );
 
   const filtered = useMemo(() => {

@@ -60,7 +60,7 @@ export function EnquiriesClient({ initialEnquiries, users, currentUser }: Props)
     }).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }, [enquiries, search, filterStatus, filterSource, filterAgent]);
 
-  const agentNames = useMemo(() => Array.from(new Set([...users.map(u => u.name), ...enquiries.map(e => e.createdBy)])).filter(Boolean), [users, enquiries]);
+  const agentNames = useMemo(() => Array.from(new Set(users.map(u => u.name))).filter(Boolean), [users]);
 
   const handleQuickStatus = (e: Enquiry, status: string) => {
     if (status === 'lost') { setLostDialog({ enquiry: e, reason: '', renurtureAfter: 30 }); return; }

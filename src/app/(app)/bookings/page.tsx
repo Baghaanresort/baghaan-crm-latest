@@ -16,7 +16,7 @@ export default async function BookingsPage() {
   const [bookings, payments, usersData] = await Promise.all([
     getBookings(),
     getPayments(),
-    supabase.from('profiles').select('name, role'),
+    supabase.from('profiles').select('name, role').in('role', ['Admin', 'Sales', 'Accounts', 'Front Office']),
   ]);
 
   return (
