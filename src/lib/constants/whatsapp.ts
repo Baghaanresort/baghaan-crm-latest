@@ -7,6 +7,8 @@ export const WA_TEMPLATES = {
     `Hi ${name}, a gentle reminder that ₹${amount} is pending for your upcoming stay at Baghaan. Please share the transaction reference once done. Thank you! 🙏`,
   enquiryGreeting: (name: string) =>
     `Hi ${name || 'there'}, thank you for your interest in Baghaan Orchard Retreat! 🌿`,
+  enquiryLost: (name: string) =>
+    `Hi ${name || 'there'}, thank you for considering Baghaan Orchard Retreat. We completely understand if the timing didn't work out. We'd love to welcome you whenever you're ready — feel free to reach out anytime. 🌿`,
 } as const;
 
 export function buildWaLink(phone: string, message: string): string {

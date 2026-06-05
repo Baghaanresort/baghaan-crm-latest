@@ -4,9 +4,10 @@ import { useState, useMemo, useTransition, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Plus, Search, Trash2, Edit2, ArrowRight, Download, MessageCircle } from 'lucide-react';
 import { toast } from 'sonner';
-import { updateEnquiry, deleteEnquiry } from '@/lib/actions/enquiries';
+import { updateEnquiry, deleteEnquiry, convertEnquiryToBooking } from '@/lib/actions/enquiries';
 import { ENQUIRY_STATUSES, ENQUIRY_SOURCES, ENQUIRY_TYPES, LOST_REASONS } from '@/lib/constants/enquiry';
 import { buildWaLink, WA_TEMPLATES } from '@/lib/constants/whatsapp';
+import { addDays } from '@/lib/utils/date';
 import { fmtDate, todayISO } from '@/lib/utils/date';
 import type { Enquiry } from '@/lib/types/enquiry';
 import type { UserRole } from '@/lib/types/profile';
@@ -32,7 +33,7 @@ export function EnquiriesClient({ initialEnquiries, users, currentUser }: Props)
   const [isPending, startTransition] = useTransition();
   const [showNew, setShowNew] = useState(false);
   const [editEnquiry, setEditEnquiry] = useState<Enquiry | null>(null);
-  const [lostDialog, setLostDialog] = useState<{ enquiry: Enquiry; reason: string } | null>(null);
+  const [lostDialog, setLostDialog] = useState<{ enquiry: Enquiry; reason: string; renurtureAfter: number | null } | null>(null);
 
   const isSales = currentUser.role === 'Sales';
   const isAdmin = currentUser.role === 'Admin';
@@ -62,7 +63,7 @@ export function EnquiriesClient({ initialEnquiries, users, currentUser }: Props)
   const agentNames = useMemo(() => Array.from(new Set([...users.map(u => u.name), ...enquiries.map(e => e.createdBy)])).filter(Boolean), [users, enquiries]);
 
   const handleQuickStatus = (e: Enquiry, status: string) => {
-    if (status === 'lost') { setLostDialog({ enquiry: e, reason: '' }); return; }
+    if (status === 'lost') { setLostDialog({ enquiry: e, reason: '', renurtureAfter: 30 }); return; }
     startTransition(async () => {
       const result = await updateEnquiry(e.id, { status: status as Enquiry['status'] });
       if (!result.success) { toast.error(result.error); return; }
@@ -72,12 +73,31 @@ export function EnquiriesClient({ initialEnquiries, users, currentUser }: Props)
 
   const handleMarkLost = () => {
     if (!lostDialog) return;
+    const enquiry = lostDialog.enquiry;
+    const followupDate = lostDialog.renurtureAfter ? addDays(today, lostDialog.renurtureAfter) : null;
     startTransition(async () => {
-      const result = await updateEnquiry(lostDialog.enquiry.id, { status: 'lost', lostReason: lostDialog.reason });
+      const result = await updateEnquiry(enquiry.id, {
+        status: 'lost',
+        lostReason: lostDialog.reason,
+        followupDate,
+        nextAction: followupDate ? `Re-nurture after ${lostDialog.renurtureAfter} days` : '',
+      });
       if (!result.success) { toast.error(result.error); return; }
       setLostDialog(null);
-      toast.success('Marked as lost');
+      toast.success(`Marked as lost${followupDate ? ` — follow-up set for ${lostDialog.renurtureAfter} days` : ''}`)
       router.refresh();
+      // Auto-open WhatsApp with closing message
+      const waUrl = buildWaLink(enquiry.phone, WA_TEMPLATES.enquiryLost(enquiry.name));
+      window.open(waUrl, '_blank');
+    });
+  };
+
+  const handleConvert = (e: Enquiry) => {
+    startTransition(async () => {
+      const result = await convertEnquiryToBooking(e.id);
+      if (!result.success) { toast.error(result.error); return; }
+      toast.success('Opening booking form…');
+      router.push(`/bookings?convert=${e.id}&name=${encodeURIComponent(result.data.prefill.guestName)}&phone=${encodeURIComponent(result.data.prefill.contactNumber)}&email=${encodeURIComponent(result.data.prefill.email)}`);
     });
   };
 
@@ -195,7 +215,12 @@ export function EnquiriesClient({ initialEnquiries, users, currentUser }: Props)
                 const isOverdue = e.followupDate && e.followupDate < today && (e.status === 'new' || e.status === 'in_progress');
                 return (
                   <tr key={e.id} className="border-t border-stone-100 hover:bg-stone-50">
-                    <td className="p-3 font-mono text-xs text-stone-500">{e.enquiryNumber}</td>
+                    <td className="p-3">
+                      <div className="font-mono text-xs text-stone-500">{e.enquiryNumber}</div>
+                      {e.linkedBookingId && e.nextAction?.startsWith('Booking created') && (
+                        <div className="text-xs text-emerald-700 mt-0.5">↗ {e.nextAction.replace('Booking created · ', '')}</div>
+                      )}
+                    </td>
                     <td className="p-3">
                       <div className="font-medium">{e.name || '(No name)'}</div>
                       <div className="text-xs text-stone-500">{e.phone}</div>
@@ -220,11 +245,11 @@ export function EnquiriesClient({ initialEnquiries, users, currentUser }: Props)
                         {(isSales || isAdmin) && (
                           <>
                             <button onClick={() => setEditEnquiry(e)} className="p-1.5 hover:bg-stone-100 text-stone-600 rounded" title="Edit"><Edit2 size={12} /></button>
-                            {e.status !== 'booked' && e.status !== 'lost' && (
-                              <button onClick={() => handleQuickStatus(e, 'lost')} className="text-xs border border-stone-300 px-2 py-1 hover:bg-stone-100 text-stone-600">Lost</button>
+                            {e.status !== 'lost' && (
+                              <button onClick={() => handleQuickStatus(e, 'lost')} className="text-xs border border-red-200 px-2 py-1 hover:bg-red-50 text-red-600">Lost</button>
                             )}
-                            {e.status !== 'booked' && (
-                              <button onClick={() => setEditEnquiry({ ...e, _convert: true } as Enquiry)} className="p-1.5 hover:bg-emerald-100 text-emerald-700 rounded" title="Convert to booking"><ArrowRight size={12} /></button>
+                            {e.status !== 'booked' && e.status !== 'lost' && (
+                              <button onClick={() => handleConvert(e)} disabled={isPending} className="text-xs border border-emerald-600 px-2 py-1 hover:bg-emerald-50 text-emerald-700 disabled:opacity-50">Book</button>
                             )}
                             <button onClick={() => handleDelete(e.id)} disabled={isPending} className="p-1.5 hover:bg-red-100 text-red-600 rounded disabled:opacity-50" title="Delete"><Trash2 size={12} /></button>
                           </>
@@ -243,14 +268,32 @@ export function EnquiriesClient({ initialEnquiries, users, currentUser }: Props)
       {lostDialog && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white p-6 max-w-sm w-full shadow-xl">
-            <h3 className="font-medium mb-3">Why was this lead lost? (optional)</h3>
+            <h3 className="font-medium mb-1">Mark as Lost</h3>
+            <p className="text-xs text-stone-500 mb-4">A WhatsApp closing message will open for the guest automatically.</p>
+
+            <label className="text-xs text-stone-600 uppercase tracking-wider block mb-1">Reason (optional)</label>
             <select value={lostDialog.reason} onChange={e => setLostDialog(d => d ? { ...d, reason: e.target.value } : null)} className="w-full px-3 py-2 border border-stone-300 text-sm mb-4 bg-white">
-              <option value="">Select reason (optional)</option>
+              <option value="">Select reason</option>
               {LOST_REASONS.map(r => <option key={r} value={r}>{r}</option>)}
             </select>
+
+            <label className="text-xs text-stone-600 uppercase tracking-wider block mb-1">Follow-up Reminder</label>
+            <select
+              value={lostDialog.renurtureAfter ?? ''}
+              onChange={e => setLostDialog(d => d ? { ...d, renurtureAfter: e.target.value ? Number(e.target.value) : null } : null)}
+              className="w-full px-3 py-2 border border-stone-300 text-sm mb-4 bg-white"
+            >
+              <option value="">No follow-up needed</option>
+              <option value="15">Follow up in 15 days</option>
+              <option value="30">Follow up in 30 days</option>
+              <option value="45">Follow up in 45 days</option>
+              <option value="60">Follow up in 60 days</option>
+              <option value="90">Follow up in 90 days</option>
+            </select>
+
             <div className="flex gap-2 justify-end">
               <button onClick={() => setLostDialog(null)} className="px-4 py-2 text-sm border border-stone-300 hover:bg-stone-100">Cancel</button>
-              <button onClick={handleMarkLost} disabled={isPending} className="px-4 py-2 text-sm bg-stone-700 text-white hover:bg-stone-800 disabled:opacity-50">Mark as Lost</button>
+              <button onClick={handleMarkLost} disabled={isPending} className="px-4 py-2 text-sm bg-red-700 text-white hover:bg-red-800 disabled:opacity-50">Mark as Lost</button>
             </div>
           </div>
         </div>

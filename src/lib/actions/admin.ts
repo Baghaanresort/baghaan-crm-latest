@@ -140,10 +140,9 @@ export async function updateCounter(
 }
 
 // ---------- getAdminUsers ----------
-// Returns all profiles with emails from auth.users (uses admin client)
 
 export async function getAdminUsers(): Promise<
-  ActionResult<Array<{ id: string; name: string; role: UserRole; email: string }>>
+  ActionResult<Array<{ id: string; name: string; role: UserRole; email: string; suspended: boolean; lastSignIn: string | null }>>
 > {
   const supabase = await createClient();
   const actor = await requireAdmin(supabase);
@@ -160,14 +159,85 @@ export async function getAdminUsers(): Promise<
 
   if (profErr) return err('Failed to load users');
 
-  const emailMap = new Map(authUsers.users.map((u) => [u.id, u.email ?? '']));
+  const authMap = new Map(authUsers.users.map((u) => [u.id, u]));
 
-  const users = (profiles ?? []).map((p) => ({
-    id: p.id as string,
-    name: p.name as string,
-    role: p.role as UserRole,
-    email: emailMap.get(p.id as string) ?? '',
-  }));
+  const users = (profiles ?? []).map((p) => {
+    const au = authMap.get(p.id as string);
+    const isSuspended = au?.banned_until ? new Date(au.banned_until) > new Date() : false;
+    return {
+      id: p.id as string,
+      name: p.name as string,
+      role: p.role as UserRole,
+      email: au?.email ?? '',
+      suspended: isSuspended,
+      lastSignIn: au?.last_sign_in_at ?? null,
+    };
+  });
 
   return ok(users);
+}
+
+// ---------- suspendUser ----------
+
+export async function suspendUser(userId: string): Promise<ActionResult> {
+  if (!userId) return err('User ID required');
+  const supabase = await createClient();
+  const actor = await requireAdmin(supabase);
+  if (!actor) return err('Not authorized — Admin only');
+  const { data: { user: self } } = await supabase.auth.getUser();
+  if (self?.id === userId) return err('You cannot suspend your own account');
+
+  const admin = createAdminClient();
+  const { error } = await admin.auth.admin.updateUserById(userId, { ban_duration: '876000h' });
+  if (error) { console.error('[suspendUser]', error); return err(error.message); }
+  revalidatePath('/admin/users');
+  return ok(undefined);
+}
+
+// ---------- resumeUser ----------
+
+export async function resumeUser(userId: string): Promise<ActionResult> {
+  if (!userId) return err('User ID required');
+  const supabase = await createClient();
+  const actor = await requireAdmin(supabase);
+  if (!actor) return err('Not authorized — Admin only');
+
+  const admin = createAdminClient();
+  const { error } = await admin.auth.admin.updateUserById(userId, { ban_duration: 'none' });
+  if (error) { console.error('[resumeUser]', error); return err(error.message); }
+  revalidatePath('/admin/users');
+  return ok(undefined);
+}
+
+// ---------- sendPasswordReset ----------
+
+export async function sendPasswordReset(email: string): Promise<ActionResult> {
+  if (!email) return err('Email required');
+  const supabase = await createClient();
+  const actor = await requireAdmin(supabase);
+  if (!actor) return err('Not authorized — Admin only');
+
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: `${process.env.NEXT_PUBLIC_APP_URL ?? ''}/reset-password`,
+  });
+  if (error) { console.error('[sendPasswordReset]', error); return err(error.message); }
+  return ok(undefined);
+}
+
+// ---------- forceLogoutUser ----------
+
+export async function forceLogoutUser(userId: string): Promise<ActionResult> {
+  if (!userId) return err('User ID required');
+  const supabase = await createClient();
+  const actor = await requireAdmin(supabase);
+  if (!actor) return err('Not authorized — Admin only');
+  const { data: { user: self } } = await supabase.auth.getUser();
+  if (self?.id === userId) return err('You cannot force logout your own account');
+
+  const admin = createAdminClient();
+  // Temporarily ban then immediately unban — this invalidates all existing JWTs
+  const { error: banErr } = await admin.auth.admin.updateUserById(userId, { ban_duration: '1s' });
+  if (banErr) { console.error('[forceLogoutUser]', banErr); return err(banErr.message); }
+  revalidatePath('/admin/users');
+  return ok(undefined);
 }

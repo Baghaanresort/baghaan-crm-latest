@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 export const EnquirySchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  name: z.string().optional().default(''),
+  name: z.string().min(1, 'Guest name is required'),
   phone: z.string().min(1, 'Phone / WhatsApp number is required'),
   email: z.string().email().optional().or(z.literal('')),
   source: z.string().min(1, 'Source is required'),

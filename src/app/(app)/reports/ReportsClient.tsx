@@ -270,13 +270,24 @@ export function ReportsClient({ bookings, payments, enquiries }: Props) {
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="bg-white border border-stone-200 p-4">
-              <h3 className="text-xs uppercase tracking-wider text-stone-600 mb-3">By Source</h3>
-              {conversionStats.bySource.map(([source, s]) => (
-                <div key={source} className="flex justify-between text-sm border-b border-stone-100 py-1.5">
-                  <span>{source}</span>
-                  <span className="text-xs text-stone-500">{s.total} enquiries · {s.booked} booked ({s.total > 0 ? Math.round(s.booked / s.total * 100) : 0}%)</span>
-                </div>
-              ))}
+              <h3 className="text-xs uppercase tracking-wider text-stone-600 mb-4">Conversion Rate by Source</h3>
+              <div className="space-y-3">
+                {conversionStats.bySource.map(([source, s]) => {
+                  const rate = s.total > 0 ? Math.round(s.booked / s.total * 100) : 0;
+                  return (
+                    <div key={source}>
+                      <div className="flex justify-between text-xs mb-1">
+                        <span className="font-medium text-stone-700">{source}</span>
+                        <span className="text-stone-500">{s.booked}/{s.total} booked · <span className={`font-semibold ${rate >= 50 ? 'text-emerald-700' : rate >= 25 ? 'text-amber-700' : 'text-red-600'}`}>{rate}%</span></span>
+                      </div>
+                      <div className="h-2 bg-stone-100 rounded-full overflow-hidden">
+                        <div className={`h-full rounded-full ${rate >= 50 ? 'bg-emerald-500' : rate >= 25 ? 'bg-amber-400' : 'bg-red-400'}`} style={{ width: `${rate}%` }} />
+                      </div>
+                    </div>
+                  );
+                })}
+                {conversionStats.bySource.length === 0 && <p className="text-stone-400 italic text-sm">No data for this period</p>}
+              </div>
             </div>
             {conversionStats.byLostReason.length > 0 && (
               <div className="bg-white border border-stone-200 p-4">

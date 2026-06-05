@@ -83,7 +83,15 @@ export function FrontOfficeClient({ initialBookings, initialPayments, currentUse
                 const ps = pStats(b);
                 return (
                   <tr key={b.id} className="border-t border-stone-100 hover:bg-stone-50">
-                    <td className="p-3 font-medium">{b.guestName}</td>
+                    <td className="p-3">
+                      <div className="font-medium">{b.guestName}</div>
+                      {tab === 'departures' && (b.specialRequests || b.remarks) && (
+                        <div className="mt-1 space-y-0.5">
+                          {b.specialRequests && <div className="text-xs text-amber-700 bg-amber-50 px-2 py-0.5 rounded">⚑ {b.specialRequests}</div>}
+                          {b.remarks && <div className="text-xs text-stone-500 italic">{b.remarks}</div>}
+                        </div>
+                      )}
+                    </td>
                     <td className="p-3 text-xs text-stone-600">{b.contactNumber}</td>
                     <td className="p-3 text-xs">{b.rooms?.join(', ') || '—'}</td>
                     <td className="p-3 text-xs">{fmtDate(b.arrival)} → {fmtDate(b.departure)} ({b.nights}n)</td>

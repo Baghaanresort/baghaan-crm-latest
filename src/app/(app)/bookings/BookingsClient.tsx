@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useMemo, useTransition } from 'react';
+import { useState, useMemo, useTransition, useEffect } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { Plus, Calendar, Search, Trash2, Edit2, FileText, Download, MessageCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { deleteBooking } from '@/lib/actions/bookings';
@@ -27,6 +28,8 @@ interface Props {
 export function BookingsClient({ initialBookings, initialPayments, users, currentUser }: Props) {
   const today = todayISO();
   const role = currentUser.role;
+  const searchParams = useSearchParams();
+  const router = useRouter();
   const isAdmin = role === 'Admin';
   const isSales = role === 'Sales';
   const isFO = role === 'Front Office';
@@ -46,6 +49,19 @@ export function BookingsClient({ initialBookings, initialPayments, users, curren
   const [paymentFor, setPaymentFor] = useState<Booking | null>(null);
   const [voucherFor, setVoucherFor] = useState<Booking | null>(null);
   const [finalBillFor, setFinalBillFor] = useState<Booking | null>(null);
+  const [convertPrefill, setConvertPrefill] = useState<{ guestName: string; contactNumber: string; email: string; sourceEnquiryId: string } | null>(null);
+
+  useEffect(() => {
+    const convertId = searchParams.get('convert');
+    const name = searchParams.get('name');
+    const phone = searchParams.get('phone');
+    const email = searchParams.get('email');
+    if (convertId && name && phone) {
+      setConvertPrefill({ guestName: name, contactNumber: phone, email: email ?? '', sourceEnquiryId: convertId });
+      setShowNew(true);
+      router.replace('/bookings');
+    }
+  }, []);
 
   const pStats = (b: Booking) => getBookingPaymentStatus(b, payments);
   const effStatus = (b: Booking) => getEffectiveStatus(b, payments);
@@ -180,7 +196,10 @@ export function BookingsClient({ initialBookings, initialPayments, users, curren
                 const payColor = ps.balance <= 0 ? 'text-emerald-700' : ps.totalPaid > 0 ? 'text-amber-700' : 'text-red-700';
                 return (
                   <tr key={b.id} className={`border-t border-stone-100 hover:bg-stone-50 ${eff === 'hold' ? 'bg-amber-50/40' : eff === 'pending_verification' ? 'bg-purple-50/40' : ''}`}>
-                    <td className="p-3 font-mono text-xs">{b.confirmationNumber}</td>
+                    <td className="p-3">
+                      <div className="font-mono text-xs">{b.confirmationNumber}</div>
+                      {b.sourceEnquiryId && <div className="text-xs text-blue-600 mt-0.5">↙ From Enquiry</div>}
+                    </td>
                     <td className="p-3">
                       <div className="font-medium">{b.guestName}</div>
                       <a href={buildWaLink(b.contactNumber, WA_TEMPLATES.enquiryGreeting(b.guestName))} target="_blank" rel="noopener noreferrer" className="text-xs text-stone-500 hover:text-green-700 flex items-center gap-1">
@@ -226,7 +245,7 @@ export function BookingsClient({ initialBookings, initialPayments, users, curren
         )}
       </div>
 
-      {showNew && <BookingModal users={users} currentUser={currentUser} existingBookings={bookings} onClose={() => setShowNew(false)} />}
+      {showNew && <BookingModal users={users} currentUser={currentUser} existingBookings={bookings} prefill={convertPrefill} sourceEnquiryId={convertPrefill?.sourceEnquiryId ?? null} onClose={() => { setShowNew(false); setConvertPrefill(null); }} />}
       {showBlock && <BlockModal currentUser={currentUser} existingBookings={bookings} onClose={() => setShowBlock(false)} />}
       {editBooking && <BookingModal booking={editBooking} users={users} currentUser={currentUser} existingBookings={bookings} onClose={() => setEditBooking(null)} />}
       {paymentFor && <PaymentModal booking={paymentFor} currentUser={currentUser} payments={payments.filter(p => p.bookingId === paymentFor.id)} onClose={() => setPaymentFor(null)} />}

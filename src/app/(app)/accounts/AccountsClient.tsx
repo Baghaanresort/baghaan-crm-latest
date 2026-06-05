@@ -167,7 +167,12 @@ export function AccountsClient({ initialBookings, initialPayments, currentUser }
                     <td className="p-3 text-xs text-stone-500">{p.recordedBy}</td>
                     <td className="p-3 text-right font-medium">₹{p.amount.toLocaleString('en-IN')}</td>
                     <td className="p-3 text-right text-xs">
-                      {p.verified ? <span className="text-emerald-700">✓ Verified</span> : <span className="text-purple-700">⏳ Pending</span>}
+                      {p.verified ? (
+                        <div>
+                          <span className="text-emerald-700 font-medium">✓ Verified</span>
+                          {p.verifiedBy && <div className="text-stone-400 text-xs mt-0.5">by {p.verifiedBy}{p.verifiedAt ? ` · ${fmtDate(p.verifiedAt.slice(0, 10))}` : ''}</div>}
+                        </div>
+                      ) : <span className="text-purple-700">⏳ Pending</span>}
                     </td>
                     {canVerify && (
                       <td className="p-3 text-right">
