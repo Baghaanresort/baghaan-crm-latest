@@ -42,6 +42,13 @@ export function LoginForm() {
         return;
       }
 
+      const ALLOWED_ROLES = ['Admin', 'Sales', 'Accounts', 'Front Office'];
+      if (!ALLOWED_ROLES.includes(profile.role as string)) {
+        await supabase.auth.signOut();
+        setError('Access restricted. Please contact your administrator.');
+        return;
+      }
+
       router.push('/dashboard');
       router.refresh();
     });

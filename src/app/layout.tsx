@@ -1,10 +1,10 @@
 import type { Metadata } from 'next';
-import { Lora, Cormorant_Garamond } from 'next/font/google';
+import { Inter, Cormorant_Garamond } from 'next/font/google';
 import './globals.css';
 
-const lora = Lora({
+const inter = Inter({
   subsets: ['latin'],
-  variable: '--font-lora',
+  variable: '--font-inter',
   display: 'swap',
 });
 
@@ -26,7 +26,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${lora.variable} ${cormorant.variable} h-full`}>
+    <html lang="en" className={`${inter.variable} ${cormorant.variable} h-full`}>
       <body className="min-h-full flex flex-col bg-stone-50 text-stone-900 antialiased">
         {children}
       </body>

@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import { addPayment } from '@/lib/actions/payments';
 import { PAYMENT_MODES, FO_AUTO_VERIFY_MODES } from '@/lib/constants/payments';
 import { fmtDate, todayISO } from '@/lib/utils/date';
+import { DateInput } from '@/components/ui/DateInput';
 import type { Booking } from '@/lib/types/booking';
 import type { Payment } from '@/lib/types/payment';
 
@@ -66,7 +67,7 @@ export function PaymentModal({ booking, currentUser, payments, onClose }: Props)
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto" style={{ fontFamily: "'Lora', Georgia, serif" }}>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto">
       <div className="bg-stone-50 max-w-2xl w-full my-8">
         <div className="sticky top-0 bg-emerald-900 text-white px-6 py-4 flex justify-between items-center z-10">
           <div>
@@ -94,7 +95,7 @@ export function PaymentModal({ booking, currentUser, payments, onClose }: Props)
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="text-xs text-stone-600 uppercase tracking-wider block mb-1">Payment Date *</label>
-              <input type="date" value={form.paymentDate} onChange={e => update('paymentDate', e.target.value)} className="w-full px-3 py-2 border border-stone-300 text-sm outline-none focus:border-emerald-700 bg-white" />
+              <DateInput value={form.paymentDate} onChange={v => update('paymentDate', v)} className="w-full" />
             </div>
             <div>
               <label className="text-xs text-stone-600 uppercase tracking-wider block mb-1">Amount (₹) *</label>

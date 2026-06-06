@@ -98,7 +98,7 @@ export function ActivityTimeline({ enquiryId, activities: initialActivities }: P
                 <div className="flex-1">
                   <div className="text-stone-800">{a.note}</div>
                   <div className="text-xs text-stone-400 mt-0.5">
-                    {a.createdBy} · {new Date(a.createdAt).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                    {a.createdBy} · {(() => { const d = new Date(a.createdAt); const dd = String(d.getDate()).padStart(2,'0'); const mm = String(d.getMonth()+1).padStart(2,'0'); const hh = String(d.getHours()).padStart(2,'0'); const min = String(d.getMinutes()).padStart(2,'0'); return `${dd}/${mm}/${d.getFullYear()} ${hh}:${min}`; })()}
                   </div>
                 </div>
               </div>

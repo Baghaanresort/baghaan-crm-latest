@@ -1,8 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { useMemo } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
+import { useEffect, useMemo, useRef } from 'react';
 import {
   BarChart3,
   MessageCircle,
@@ -33,7 +33,21 @@ const TAB_ICONS: Record<string, React.ElementType> = {
 
 export function NavTabs() {
   const pathname = usePathname();
+  const router = useRouter();
   const permissions = usePermissions();
+
+  // Refetch server data whenever a tab is activated. App Router serves already-
+  // visited routes from the client cache, so lists can go stale (e.g. another
+  // user's new booking) until a hard reload. router.refresh() re-runs the
+  // destination's Server Component on each navigation. Skip the first render —
+  // the initial load is already fresh from SSR.
+  const prevPath = useRef(pathname);
+  useEffect(() => {
+    if (prevPath.current !== pathname) {
+      prevPath.current = pathname;
+      router.refresh();
+    }
+  }, [pathname, router]);
 
   const visibleTabs = useMemo(() => {
     if (!permissions) return [];

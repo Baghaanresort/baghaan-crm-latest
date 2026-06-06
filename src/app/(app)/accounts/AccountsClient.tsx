@@ -75,13 +75,26 @@ export function AccountsClient({ initialBookings, initialPayments, currentUser }
         </a>
       </div>
 
-      <div className="flex gap-1 mb-4 border-b border-stone-200">
-        {([['verify', `Pending Verification (${unverified.length})`], ['ledger', 'Full Ledger'], ['btc', `BTC Receivables (${btcOpen.length})`]] as const).map(([k, label]) => (
-          <button key={k} onClick={() => setTab(k)}
-            className={`px-4 py-2 text-sm transition border-b-2 ${tab === k ? 'border-purple-700 text-purple-900 font-medium' : 'border-transparent text-stone-500 hover:text-stone-800'}`}>
-            {label}
-          </button>
-        ))}
+      <div className="flex items-end gap-1 mb-4 border-b border-stone-200">
+        {([['verify', 'Pending Verification'], ['ledger', 'Full Ledger'], ['btc', `BTC Receivables (${btcOpen.length})`]] as const).map(([k, label]) => {
+          const isVerify = k === 'verify';
+          const active = tab === k;
+          return (
+            <button key={k} onClick={() => setTab(k)}
+              className={`transition border-b-2 ${isVerify ? 'px-6 py-3 text-base font-semibold' : 'px-4 py-2 text-sm'} ${
+                active
+                  ? `border-purple-700 text-purple-900${isVerify ? '' : ' font-medium'}`
+                  : isVerify && unverified.length > 0
+                    ? 'border-transparent text-amber-700 hover:text-amber-800'
+                    : 'border-transparent text-stone-500 hover:text-stone-800'
+              }`}>
+              {label}
+              {isVerify && unverified.length > 0 && (
+                <span className="ml-2 inline-flex items-center justify-center text-xs font-bold bg-amber-500 text-white rounded-full px-2 py-0.5 align-middle">{unverified.length}</span>
+              )}
+            </button>
+          );
+        })}
       </div>
 
       {/* Pending Verification */}
@@ -120,9 +133,10 @@ export function AccountsClient({ initialBookings, initialPayments, currentUser }
                       <td className="p-3 text-right font-medium">₹{p.amount.toLocaleString('en-IN')}</td>
                       {canVerify && (
                         <td className="p-3 text-right">
-                          <div className="flex gap-1 justify-end">
-                            <button onClick={() => handleVerify(p.id)} disabled={isPending} title="Verify" className="p-1.5 bg-emerald-100 hover:bg-emerald-200 text-emerald-700 rounded disabled:opacity-50"><CheckCircle2 size={14} /></button>
-                            {canDelete && <button onClick={() => handleDelete(p.id)} disabled={isPending} title="Delete" className="p-1.5 bg-red-50 hover:bg-red-100 text-red-600 rounded disabled:opacity-50"><Trash2 size={14} /></button>}
+                          <div className="flex gap-1.5 justify-end items-center">
+                            <button onClick={() => handleVerify(p.id)} disabled={isPending} className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium px-3 py-1.5 tracking-wider transition disabled:opacity-50">
+                              <CheckCircle2 size={13} /> VERIFY
+                            </button>
                           </div>
                         </td>
                       )}
@@ -176,11 +190,16 @@ export function AccountsClient({ initialBookings, initialPayments, currentUser }
                     </td>
                     {canVerify && (
                       <td className="p-3 text-right">
-                        <div className="flex gap-1 justify-end">
+                        <div className="flex gap-1.5 justify-end items-center">
                           {p.verified ? (
-                            <button onClick={() => handleUnverify(p.id)} disabled={isPending} title="Un-verify" className="p-1.5 hover:bg-amber-100 text-amber-700 rounded disabled:opacity-50"><XCircle size={13} /></button>
+                            <span className="inline-flex items-center gap-1 text-emerald-700 text-xs font-medium">
+                              <CheckCircle2 size={13} /> Verified
+                              <button onClick={() => handleUnverify(p.id)} disabled={isPending} title="Un-verify" className="ml-1 p-1 hover:bg-amber-100 text-amber-700 rounded disabled:opacity-50"><XCircle size={12} /></button>
+                            </span>
                           ) : (
-                            <button onClick={() => handleVerify(p.id)} disabled={isPending} title="Verify" className="p-1.5 bg-emerald-100 hover:bg-emerald-200 text-emerald-700 rounded disabled:opacity-50"><CheckCircle2 size={13} /></button>
+                            <button onClick={() => handleVerify(p.id)} disabled={isPending} className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium px-3 py-1.5 tracking-wider transition disabled:opacity-50">
+                              <CheckCircle2 size={13} /> VERIFY
+                            </button>
                           )}
                           {canDelete && <button onClick={() => handleDelete(p.id)} disabled={isPending} title="Delete" className="p-1.5 hover:bg-red-100 text-red-600 rounded disabled:opacity-50"><Trash2 size={13} /></button>}
                         </div>

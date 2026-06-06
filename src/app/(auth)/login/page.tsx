@@ -13,7 +13,6 @@ export default async function LoginPage() {
   return (
     <div
       className="min-h-screen flex items-center justify-center bg-stone-100"
-      style={{ fontFamily: "'Lora', Georgia, serif" }}
     >
       <div className="bg-white border border-stone-200 p-10 w-full max-w-md shadow-sm">
         <div className="text-center mb-8">

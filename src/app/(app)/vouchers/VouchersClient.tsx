@@ -1,21 +1,30 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { Search, FileText, Printer } from 'lucide-react';
+import dynamic from 'next/dynamic';
+import { Search, FileText, Printer, Eye, Edit2, Lock, History } from 'lucide-react';
 import { fmtDate } from '@/lib/utils/date';
 import { buildWaLink, WA_TEMPLATES } from '@/lib/constants/whatsapp';
 import { getVoucherShareUrl } from '@/lib/actions/vouchers';
+import { isVoucherEditable } from '@/lib/utils/voucher';
 import type { Booking } from '@/lib/types/booking';
 import type { UserRole } from '@/lib/types/profile';
 import { MessageCircle } from 'lucide-react';
 
+const BookingModal = dynamic(() => import('@/components/bookings/BookingModal').then(m => ({ default: m.BookingModal })), { ssr: false });
+const VoucherHistoryModal = dynamic(() => import('@/components/vouchers/VoucherHistoryModal').then(m => ({ default: m.VoucherHistoryModal })), { ssr: false });
+
 interface Props {
   initialBookings: Booking[];
+  users: Array<{ name: string; role: string }>;
   currentUser: { id: string; name: string; role: UserRole };
 }
 
-export function VouchersClient({ initialBookings }: Props) {
+export function VouchersClient({ initialBookings, users, currentUser }: Props) {
   const [search, setSearch] = useState('');
+  const [editVoucherFor, setEditVoucherFor] = useState<Booking | null>(null);
+  const [historyFor, setHistoryFor] = useState<Booking | null>(null);
+  const canEditVoucher = currentUser.role === 'Sales' || currentUser.role === 'Admin';
 
   const filtered = useMemo(() => {
     if (!search) return initialBookings.slice().sort((a, b) => b.arrival.localeCompare(a.arrival));
@@ -28,6 +37,10 @@ export function VouchersClient({ initialBookings }: Props) {
   const handlePrint = (b: Booking) => {
     const win = window.open(`/api/print/voucher?bookingId=${b.id}`, '_blank');
     win?.addEventListener('load', () => setTimeout(() => win.print(), 300));
+  };
+
+  const handleView = (b: Booking) => {
+    window.open(`/api/print/voucher?bookingId=${b.id}`, '_blank', 'noopener,noreferrer');
   };
 
   const handleWhatsApp = async (b: Booking) => {
@@ -67,6 +80,25 @@ export function VouchersClient({ initialBookings }: Props) {
                 <div className="font-medium text-emerald-800">₹{b.totalAmount.toLocaleString('en-IN')}</div>
               </div>
               <div className="flex gap-2">
+                {canEditVoucher && (
+                  isVoucherEditable(b.arrival) ? (
+                    <button onClick={() => setEditVoucherFor(b)} title="Edit voucher" className="flex items-center justify-center gap-1 text-xs border border-amber-600 text-amber-700 px-3 py-1.5 hover:bg-amber-50 transition tracking-wider">
+                      <Edit2 size={12} /> EDIT
+                    </button>
+                  ) : (
+                    <button disabled title="Locked — editing closes 12 hours before check-in" className="flex items-center justify-center gap-1 text-xs border border-stone-200 text-stone-300 px-3 py-1.5 cursor-not-allowed">
+                      <Lock size={12} />
+                    </button>
+                  )
+                )}
+                {canEditVoucher && (
+                  <button onClick={() => setHistoryFor(b)} title="Edit history" className="flex items-center justify-center gap-1 text-xs border border-stone-300 text-stone-600 px-3 py-1.5 hover:bg-stone-50 transition tracking-wider">
+                    <History size={12} />
+                  </button>
+                )}
+                <button onClick={() => handleView(b)} className="flex items-center justify-center gap-1 text-xs border border-emerald-700 text-emerald-800 px-3 py-1.5 hover:bg-emerald-50 transition tracking-wider">
+                  <Eye size={12} /> VIEW
+                </button>
                 <button onClick={() => handlePrint(b)} className="flex-1 flex items-center justify-center gap-1.5 text-xs bg-emerald-900 text-amber-100 py-1.5 hover:bg-emerald-800 transition tracking-wider">
                   <Printer size={12} /> PRINT VOUCHER
                 </button>
@@ -79,6 +111,19 @@ export function VouchersClient({ initialBookings }: Props) {
           ))
         )}
       </div>
+
+      {editVoucherFor && (
+        <BookingModal
+          booking={editVoucherFor}
+          users={users}
+          currentUser={currentUser}
+          existingBookings={initialBookings}
+          voucherEdit
+          onClose={() => setEditVoucherFor(null)}
+        />
+      )}
+
+      {historyFor && <VoucherHistoryModal booking={historyFor} onClose={() => setHistoryFor(null)} />}
     </div>
   );
 }

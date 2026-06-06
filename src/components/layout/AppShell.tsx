@@ -15,7 +15,6 @@ export function AppShell({ user, children }: Props) {
     <UserProvider user={user}>
       <div
         className="min-h-screen bg-stone-50 text-stone-900"
-        style={{ fontFamily: "'Lora', Georgia, serif" }}
       >
         <header className="bg-emerald-900 text-stone-50 border-b-4 border-amber-500">
           <AppHeader />

@@ -23,7 +23,7 @@ export function OccupancyHeader({ monthLabel, onPrev, onNext, onToday }: Props) 
           >
             Occupancy Calendar
           </h2>
-          <p className="text-sm text-stone-500 italic">{monthLabel}</p>
+          <p className="text-sm text-stone-500 italic">Room availability at a glance</p>
         </div>
       </div>
       <div className="flex items-center gap-1.5">
@@ -36,9 +36,10 @@ export function OccupancyHeader({ monthLabel, onPrev, onNext, onToday }: Props) 
         </button>
         <button
           onClick={onToday}
-          className="px-3 h-8 border border-stone-300 rounded-lg hover:bg-stone-100 transition-colors text-stone-600 text-xs font-medium"
+          title="Jump to current month"
+          className="px-3 h-8 min-w-[130px] border border-stone-300 rounded-lg hover:bg-stone-100 transition-colors text-stone-700 text-sm font-medium"
         >
-          Today
+          {monthLabel}
         </button>
         <button
           onClick={onNext}

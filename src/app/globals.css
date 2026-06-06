@@ -13,12 +13,20 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: 'Lora', Georgia, serif;
+  font-family: var(--font-inter), 'Inter', system-ui, -apple-system, sans-serif;
+  font-size: 14px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
   overflow-x: hidden;
 }
 
 html {
   overflow-x: hidden;
+}
+
+/* Display font utility — use only for main headings and KPI numbers */
+.font-display {
+  font-family: var(--font-cormorant), 'Cormorant Garamond', Georgia, serif;
 }
 
 /* Hide number input spinners */
@@ -29,6 +37,18 @@ input[type='number']::-webkit-outer-spin-button {
 }
 input[type='number'] {
   -moz-appearance: textfield;
+}
+
+/* Tabular numbers — all digits same width for column alignment */
+table td,
+table th {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Numeric data cells — right-aligned numbers always tabular */
+.num {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
 }
 
 /* Print utilities */

@@ -4,7 +4,6 @@ export default function NotFound() {
   return (
     <div
       className="min-h-screen flex items-center justify-center bg-stone-50"
-      style={{ fontFamily: "'Lora', Georgia, serif" }}
     >
       <div className="text-center">
         <h1

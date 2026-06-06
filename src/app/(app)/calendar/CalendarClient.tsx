@@ -49,7 +49,12 @@ interface Props {
 }
 
 export function CalendarClient({ initialBookings: bookings, maintenanceBlocks }: Props) {
-  const today = isoDate(new Date());
+  // Local calendar date (YYYY-MM-DD). Built from local parts to match the day
+  // cells and the <input type="date"> values bookings are saved with. isoDate()
+  // uses UTC and would be a day behind in +UTC zones (e.g. IST before 05:30),
+  // which mis-highlighted "today" and skewed the today-KPIs.
+  const now = new Date();
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
   const [monthOffset, setMonthOffset] = useState(0);
   const [roomTypeFilter, setRoomTypeFilter] = useState<RoomTypeFilter>('All');

@@ -15,7 +15,6 @@ export default function GlobalError({ error, reset }: Props) {
   return (
     <div
       className="min-h-screen flex items-center justify-center bg-stone-50"
-      style={{ fontFamily: "'Lora', Georgia, serif" }}
     >
       <div className="text-center max-w-md">
         <h1

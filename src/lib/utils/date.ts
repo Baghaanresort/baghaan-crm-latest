@@ -1,9 +1,26 @@
+// Display format across the whole app is dd/mm/yyyy. Use these helpers for ANY
+// date shown to the user (tables, dialogs, logs). Note: native <input type="date">
+// renders in the browser's own locale and cannot be forced to dd/mm/yyyy — that's
+// a platform constraint; these helpers cover every non-native-input surface.
 export function fmtDate(d: string | Date | null | undefined): string {
   if (!d) return '';
   const dt = typeof d === 'string' ? new Date(d) : d;
+  if (isNaN(dt.getTime())) return typeof d === 'string' ? d : ''; // tolerate legacy free-text
   const dd = String(dt.getDate()).padStart(2, '0');
   const mm = String(dt.getMonth() + 1).padStart(2, '0');
   return `${dd}/${mm}/${dt.getFullYear()}`;
+}
+
+// dd/mm/yyyy HH:mm — for timestamps (e.g. edit logs).
+export function fmtDateTime(d: string | Date | null | undefined): string {
+  if (!d) return '';
+  const dt = typeof d === 'string' ? new Date(d) : d;
+  if (isNaN(dt.getTime())) return typeof d === 'string' ? d : '';
+  const dd = String(dt.getDate()).padStart(2, '0');
+  const mm = String(dt.getMonth() + 1).padStart(2, '0');
+  const hh = String(dt.getHours()).padStart(2, '0');
+  const min = String(dt.getMinutes()).padStart(2, '0');
+  return `${dd}/${mm}/${dt.getFullYear()} ${hh}:${min}`;
 }
 
 export function isoDate(d: string | Date): string {

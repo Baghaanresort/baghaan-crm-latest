@@ -1,5 +1,6 @@
 'use client';
 
+import { Fragment } from 'react';
 import { X, Printer } from 'lucide-react';
 import { fmtDate, datesInRange } from '@/lib/utils/date';
 import { BILLING_ENTITIES } from '@/lib/constants/billing';
@@ -33,7 +34,7 @@ export function ProformaInvoicePreview({ booking, onClose }: Props) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 overflow-y-auto" style={{ fontFamily: "'Lora', Georgia, serif" }}>
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 overflow-y-auto">
       <div className="bg-white max-w-3xl w-full my-8">
         <div className="sticky top-0 bg-purple-700 text-white px-6 py-4 flex justify-between items-center z-10">
           <div><h2 style={{ fontFamily: "'Cormorant Garamond', serif", fontWeight: 600 }} className="text-xl tracking-wider">Proforma Invoice</h2><p className="text-xs text-purple-100 font-mono">{pi.piNumber}</p></div>
@@ -79,15 +80,15 @@ export function ProformaInvoicePreview({ booking, onClose }: Props) {
                 const di = ibd[day] ?? [];
                 if (!di.length) return null;
                 return (
-                  <>
-                    <tr key={`day-${day}`} className="bg-amber-50"><td colSpan={4} className="p-2 text-xs uppercase tracking-wider font-medium text-amber-900">{fmtDate(day)}</td></tr>
+                  <Fragment key={`day-${day}`}>
+                    <tr className="bg-amber-50"><td colSpan={4} className="p-2 text-xs uppercase tracking-wider font-medium text-amber-900">{fmtDate(day)}</td></tr>
                     {di.map((li, j) => { const t = Number(li.rate ?? 0) * Number(li.qty ?? 1) * Number(li.units ?? 1); return (
                       <tr key={`${day}-${j}`} className="border-t border-stone-100">
                         <td className="p-2">{li.particular}</td><td className="p-2 text-right">{Number(li.rate).toLocaleString('en-IN')}</td>
                         <td className="p-2 text-right">{li.qty}{li.units > 1 ? ` × ${li.units}` : ''}</td><td className="p-2 text-right">{t.toLocaleString('en-IN')}</td>
                       </tr>
                     ); })}
-                  </>
+                  </Fragment>
                 );
               })}
               {(ibd['multi'] ?? []).length > 0 && (

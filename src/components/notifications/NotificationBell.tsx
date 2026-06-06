@@ -129,7 +129,7 @@ function NotifContent({ n }: { n: { title: string; body: string; read: boolean; 
       <div className={`text-sm ${!n.read ? 'font-medium' : ''}`}>{n.title}</div>
       {n.body && <div className="text-xs text-stone-500 mt-0.5">{n.body}</div>}
       <div className="text-xs text-stone-400 mt-1">
-        {new Date(n.createdAt).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+        {(() => { const d = new Date(n.createdAt); const dd = String(d.getDate()).padStart(2,'0'); const mm = String(d.getMonth()+1).padStart(2,'0'); const hh = String(d.getHours()).padStart(2,'0'); const min = String(d.getMinutes()).padStart(2,'0'); return `${dd}/${mm}/${d.getFullYear()} ${hh}:${min}`; })()}
       </div>
     </>
   );
