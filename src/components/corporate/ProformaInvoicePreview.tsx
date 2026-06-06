@@ -1,5 +1,6 @@
 'use client';
 
+import { Fragment } from 'react';
 import { X, Printer } from 'lucide-react';
 import { fmtDate, datesInRange } from '@/lib/utils/date';
 import { BILLING_ENTITIES } from '@/lib/constants/billing';
@@ -79,15 +80,15 @@ export function ProformaInvoicePreview({ booking, onClose }: Props) {
                 const di = ibd[day] ?? [];
                 if (!di.length) return null;
                 return (
-                  <>
-                    <tr key={`day-${day}`} className="bg-amber-50"><td colSpan={4} className="p-2 text-xs uppercase tracking-wider font-medium text-amber-900">{fmtDate(day)}</td></tr>
+                  <Fragment key={`day-${day}`}>
+                    <tr className="bg-amber-50"><td colSpan={4} className="p-2 text-xs uppercase tracking-wider font-medium text-amber-900">{fmtDate(day)}</td></tr>
                     {di.map((li, j) => { const t = Number(li.rate ?? 0) * Number(li.qty ?? 1) * Number(li.units ?? 1); return (
                       <tr key={`${day}-${j}`} className="border-t border-stone-100">
                         <td className="p-2">{li.particular}</td><td className="p-2 text-right">{Number(li.rate).toLocaleString('en-IN')}</td>
                         <td className="p-2 text-right">{li.qty}{li.units > 1 ? ` × ${li.units}` : ''}</td><td className="p-2 text-right">{t.toLocaleString('en-IN')}</td>
                       </tr>
                     ); })}
-                  </>
+                  </Fragment>
                 );
               })}
               {(ibd['multi'] ?? []).length > 0 && (

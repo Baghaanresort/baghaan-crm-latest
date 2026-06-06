@@ -182,27 +182,11 @@ export async function updateEnquiry(
   return ok(undefined);
 }
 
-// ---------- deleteEnquiry ----------
-
-export async function deleteEnquiry(enquiryId: string): Promise<ActionResult> {
-  if (!enquiryId) return err('Enquiry ID required');
-
-  const supabase = await createClient();
-  const actor = await getAuthedUser(supabase);
-  if (!actor) return err('Not authenticated');
-  if (!['Sales', 'Admin'].includes(actor.role)) {
-    return err('Only Sales and Admin can delete enquiries');
-  }
-
-  const { error } = await supabase.from('enquiries').delete().eq('id', enquiryId);
-  if (error) {
-    console.error('[deleteEnquiry]', error);
-    return err('Failed to delete enquiry.');
-  }
-
-  revalidateEnquiryPaths();
-  return ok(undefined);
-}
+// ---------- deleteEnquiry — intentionally removed ----------
+// Enquiries are a permanent audit record and must not be deletable. The delete
+// action and UI were removed; deletes are also blocked at the DB layer by RLS
+// (see supabase/migrations/002_lock_enquiry_delete.sql). Mark a lead "lost"
+// instead of deleting it.
 
 // ---------- convertEnquiryToBooking ----------
 

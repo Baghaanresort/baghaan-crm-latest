@@ -7,6 +7,7 @@ import { updateCounter } from '@/lib/actions/admin';
 import { createClient } from '@/lib/supabase/client';
 import { ALL_ROOMS } from '@/lib/constants/rooms';
 import { fmtDate, todayISO } from '@/lib/utils/date';
+import { DateInput } from '@/components/ui/DateInput';
 
 interface MaintenanceBlock {
   id: string;
@@ -144,11 +145,11 @@ export function SettingsClient({ bookingCounter, piCounter, enquiryCounter, main
             </div>
             <div>
               <label className="text-xs text-stone-600 block mb-1">From</label>
-              <input type="date" value={newBlock.dateFrom} onChange={e => setNewBlock(f => ({ ...f, dateFrom: e.target.value }))} className="w-full px-2 py-1.5 border border-stone-300 text-sm bg-white" />
+              <DateInput value={newBlock.dateFrom} onChange={v => setNewBlock(f => ({ ...f, dateFrom: v }))} className="w-full" />
             </div>
             <div>
               <label className="text-xs text-stone-600 block mb-1">To</label>
-              <input type="date" value={newBlock.dateTo} onChange={e => setNewBlock(f => ({ ...f, dateTo: e.target.value }))} className="w-full px-2 py-1.5 border border-stone-300 text-sm bg-white" />
+              <DateInput value={newBlock.dateTo} onChange={v => setNewBlock(f => ({ ...f, dateTo: v }))} className="w-full" />
             </div>
             <div>
               <label className="text-xs text-stone-600 block mb-1">Reason</label>

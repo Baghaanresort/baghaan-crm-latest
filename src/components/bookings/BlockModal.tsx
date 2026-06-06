@@ -3,36 +3,48 @@
 import { useState, useTransition, useMemo, useEffect } from 'react';
 import { X } from 'lucide-react';
 import { toast } from 'sonner';
-import { createBlockedRoom } from '@/lib/actions/bookings';
+import { createBlockedRoom, updateBooking } from '@/lib/actions/bookings';
 import { ROOM_INVENTORY } from '@/lib/constants/rooms';
-import { datesInRange, isoDate, daysBetween, todayISO } from '@/lib/utils/date';
+import { datesInRange, isoDate, daysBetween, todayISO, addDays } from '@/lib/utils/date';
+import { DateInput } from '@/components/ui/DateInput';
 import type { Booking } from '@/lib/types/booking';
 
 interface Props {
   currentUser: { name: string; role: string };
   existingBookings: Booking[];
+  booking?: Booking;
+  onConvert?: (hold: Booking) => void;
   onClose: () => void;
 }
 
-export function BlockModal({ currentUser, existingBookings, onClose }: Props) {
+// datetime-local needs "YYYY-MM-DDTHH:mm" in the user's local time
+function toLocalInput(iso: string | null): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+}
+
+export function BlockModal({ currentUser, existingBookings, booking, onConvert, onClose }: Props) {
   const today = todayISO();
+  const isEdit = !!booking;
   const [isPending, startTransition] = useTransition();
 
   const defaultExpiry = new Date(Date.now() + 48 * 3600000);
   const localExpiry = new Date(defaultExpiry.getTime() - defaultExpiry.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
 
   const [form, setForm] = useState({
-    guestName: '',
-    contactNumber: '',
-    arrival: today,
-    departure: isoDate(new Date(Date.now() + 86400000)),
-    nights: 1,
-    adults: 2,
-    children: 0,
-    rooms: [] as string[],
-    quotedAmount: 0,
-    notes: '',
-    holdExpiresAt: localExpiry,
+    guestName: booking?.guestName ?? '',
+    contactNumber: booking?.contactNumber ?? '',
+    arrival: booking?.arrival ?? today,
+    departure: booking?.departure ?? isoDate(new Date(Date.now() + 86400000)),
+    nights: booking?.nights ?? 1,
+    adults: booking?.adults ?? 2,
+    children: booking?.children ?? 0,
+    rooms: booking?.rooms ?? ([] as string[]),
+    // Blank by default (not 0): an empty quote ≠ a quote of zero.
+    quotedAmount: booking?.totalAmount ? String(booking.totalAmount) : '',
+    notes: booking?.remarks ?? '',
+    holdExpiresAt: booking ? toLocalInput(booking.holdExpiresAt) : localExpiry,
   });
 
   useEffect(() => {
@@ -43,6 +55,11 @@ export function BlockModal({ currentUser, existingBookings, onClose }: Props) {
   const update = <K extends keyof typeof form>(k: K, v: typeof form[K]) =>
     setForm(f => ({ ...f, [k]: v }));
 
+  // Changing arrival defaults departure to the next day when it's empty or no
+  // longer after arrival. A longer stay is preserved; user can still override.
+  const handleArrivalChange = (v: string) =>
+    setForm(f => ({ ...f, arrival: v, departure: (!f.departure || f.departure <= v) ? addDays(v, 1) : f.departure }));
+
   const toggleRoom = (room: string) => {
     setForm(f => ({ ...f, rooms: f.rooms.includes(room) ? f.rooms.filter(r => r !== room) : [...f.rooms, room] }));
   };
@@ -50,12 +67,12 @@ export function BlockModal({ currentUser, existingBookings, onClose }: Props) {
   const occupiedRooms = useMemo(() => {
     const ranges = datesInRange(form.arrival, form.departure);
     const set = new Set<string>();
-    existingBookings.forEach(b => {
+    existingBookings.filter(b => b.id !== booking?.id).forEach(b => {
       const bDates = datesInRange(b.arrival, b.departure);
       if (bDates.some(d => ranges.includes(d))) (b.rooms ?? []).forEach(r => set.add(r));
     });
     return set;
-  }, [form.arrival, form.departure, existingBookings]);
+  }, [form.arrival, form.departure, existingBookings, booking?.id]);
 
   const setExpiry = (hrs: number) => {
     const d = new Date(Date.now() + hrs * 3600000);
@@ -68,11 +85,35 @@ export function BlockModal({ currentUser, existingBookings, onClose }: Props) {
     if (!form.contactNumber.trim()) { toast.error('Contact number is required'); return; }
     if (form.rooms.length === 0) { toast.error('Select at least one room to block'); return; }
     if (form.nights < 1) { toast.error('Departure must be after arrival'); return; }
+    const quoted = form.quotedAmount.trim() === '' ? 0 : Number(form.quotedAmount);
+    if (Number.isNaN(quoted) || quoted < 0) { toast.error('Quoted amount must be a positive number'); return; }
 
     startTransition(async () => {
-      const result = await createBlockedRoom({ ...form, createdBy: currentUser.name });
-      if (!result.success) { toast.error(result.error); return; }
-      toast.success(`Rooms blocked: ${result.data.confirmationNumber}`);
+      if (isEdit && booking) {
+        // Spread the full hold and override only the block-editable fields, so
+        // bookingToDb (which fills `||` defaults) can't clobber unrelated columns.
+        const result = await updateBooking(booking.id, {
+          ...booking,
+          guestName: form.guestName,
+          contactNumber: form.contactNumber,
+          arrival: form.arrival,
+          departure: form.departure,
+          nights: form.nights,
+          adults: form.adults,
+          children: form.children,
+          rooms: form.rooms,
+          totalAmount: quoted,
+          remarks: form.notes,
+          holdExpiresAt: form.holdExpiresAt || null,
+          status: 'hold',
+        });
+        if (!result.success) { toast.error(result.error); return; }
+        toast.success('Hold updated');
+      } else {
+        const result = await createBlockedRoom({ ...form, quotedAmount: quoted, createdBy: currentUser.name });
+        if (!result.success) { toast.error(result.error); return; }
+        toast.success(`Rooms blocked: ${result.data.confirmationNumber}`);
+      }
       onClose();
     });
   };
@@ -82,8 +123,8 @@ export function BlockModal({ currentUser, existingBookings, onClose }: Props) {
       <div className="bg-stone-50 max-w-3xl w-full my-8 max-h-[90vh] overflow-y-auto">
         <div className="sticky top-0 bg-amber-600 text-white px-6 py-4 flex justify-between items-center z-10">
           <div>
-            <h2 style={{ fontFamily: "'Cormorant Garamond', serif", fontWeight: 600 }} className="text-xl tracking-wider">Block Rooms</h2>
-            <p className="text-xs text-amber-100 italic mt-0.5">Hold rooms tentatively until guest pays</p>
+            <h2 style={{ fontFamily: "'Cormorant Garamond', serif", fontWeight: 600 }} className="text-xl tracking-wider">{isEdit ? 'Edit Hold' : 'Block Rooms'}</h2>
+            <p className="text-xs text-amber-100 italic mt-0.5">{isEdit && booking ? `${booking.confirmationNumber} · update the hold or convert it to a booking` : 'Hold rooms tentatively until guest pays'}</p>
           </div>
           <button onClick={onClose} className="hover:bg-amber-700 p-1 rounded"><X size={18} /></button>
         </div>
@@ -94,8 +135,8 @@ export function BlockModal({ currentUser, existingBookings, onClose }: Props) {
             <div><label className="text-xs text-stone-600 uppercase tracking-wider block mb-1">Contact Number *</label><input value={form.contactNumber} onChange={e => update('contactNumber', e.target.value)} className="w-full px-3 py-2 border border-stone-300 text-sm outline-none bg-white" /></div>
           </div>
           <div className="grid grid-cols-5 gap-3">
-            <div><label className="text-xs text-stone-600 uppercase tracking-wider block mb-1">Arrival</label><input type="date" value={form.arrival} onChange={e => update('arrival', e.target.value)} className="w-full px-3 py-2 border border-stone-300 text-sm outline-none bg-white" /></div>
-            <div><label className="text-xs text-stone-600 uppercase tracking-wider block mb-1">Departure</label><input type="date" value={form.departure} onChange={e => update('departure', e.target.value)} className="w-full px-3 py-2 border border-stone-300 text-sm outline-none bg-white" /></div>
+            <div><label className="text-xs text-stone-600 uppercase tracking-wider block mb-1">Arrival</label><DateInput value={form.arrival} onChange={v => handleArrivalChange(v)} className="w-full" /></div>
+            <div><label className="text-xs text-stone-600 uppercase tracking-wider block mb-1">Departure</label><DateInput value={form.departure} min={form.arrival} onChange={v => update('departure', v)} className="w-full" /></div>
             <div><label className="text-xs text-stone-600 uppercase tracking-wider block mb-1">Nights</label><input type="number" value={form.nights} readOnly className="w-full px-3 py-2 border border-stone-300 text-sm outline-none bg-stone-100" /></div>
             <div><label className="text-xs text-stone-600 uppercase tracking-wider block mb-1">Adults</label><input type="number" value={form.adults} onChange={e => update('adults', Number(e.target.value))} className="w-full px-3 py-2 border border-stone-300 text-sm outline-none bg-white" /></div>
             <div><label className="text-xs text-stone-600 uppercase tracking-wider block mb-1">Children</label><input type="number" value={form.children} onChange={e => update('children', Number(e.target.value))} className="w-full px-3 py-2 border border-stone-300 text-sm outline-none bg-white" /></div>
@@ -141,18 +182,25 @@ export function BlockModal({ currentUser, existingBookings, onClose }: Props) {
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-            <div><label className="text-xs text-stone-600 uppercase tracking-wider block mb-1">Quoted Amount (₹) — optional</label><input type="number" value={form.quotedAmount} onChange={e => update('quotedAmount', Number(e.target.value))} className="w-full px-3 py-2 border border-stone-300 text-sm outline-none bg-white" /></div>
+            <div><label className="text-xs text-stone-600 uppercase tracking-wider block mb-1">Quoted Amount (₹) — optional</label><input type="number" min="0" value={form.quotedAmount} onChange={e => update('quotedAmount', e.target.value)} placeholder="—" className="w-full px-3 py-2 border border-stone-300 text-sm outline-none bg-white" /></div>
             <div><label className="text-xs text-stone-600 uppercase tracking-wider block mb-1">Quick Note</label><input value={form.notes} onChange={e => update('notes', e.target.value)} placeholder="e.g. 'Will pay by Friday'" className="w-full px-3 py-2 border border-stone-300 text-sm outline-none bg-white" /></div>
           </div>
 
-          <div className="bg-emerald-50 border-l-4 border-emerald-700 p-3 text-xs text-stone-700 italic">
-            When the guest pays, open the booking and convert this hold into a confirmed booking. You'll add full details at that point.
-          </div>
+          {!isEdit && (
+            <div className="bg-emerald-50 border-l-4 border-emerald-700 p-3 text-xs text-stone-700 italic">
+              When the guest pays, open the booking and convert this hold into a confirmed booking. You'll add full details at that point.
+            </div>
+          )}
 
           <div className="flex justify-end gap-3 pt-4 border-t border-stone-300">
             <button onClick={onClose} className="px-5 py-2.5 text-sm border border-stone-300 hover:bg-stone-100 transition tracking-wider">CANCEL</button>
+            {isEdit && booking && onConvert && (
+              <button onClick={() => onConvert(booking)} disabled={isPending} className="px-6 py-2.5 text-sm bg-emerald-900 hover:bg-emerald-800 text-amber-100 transition tracking-wider disabled:opacity-50">
+                CONVERT TO BOOKING
+              </button>
+            )}
             <button onClick={handleSave} disabled={isPending} className="px-6 py-2.5 text-sm bg-amber-600 hover:bg-amber-700 text-white transition tracking-wider disabled:opacity-50">
-              {isPending ? 'SAVING…' : 'BLOCK ROOMS'}
+              {isPending ? 'SAVING…' : isEdit ? 'UPDATE HOLD' : 'BLOCK ROOMS'}
             </button>
           </div>
         </div>

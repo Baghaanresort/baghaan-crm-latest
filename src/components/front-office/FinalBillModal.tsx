@@ -7,6 +7,7 @@ import { setFinalBill, clearFinalBill } from '@/lib/actions/bookings';
 import { addPayment } from '@/lib/actions/payments';
 import { PAYMENT_MODES } from '@/lib/constants/payments';
 import { fmtDate, todayISO } from '@/lib/utils/date';
+import { DateInput } from '@/components/ui/DateInput';
 import { getBookingPaymentStatus } from '@/lib/utils/booking';
 import type { Booking } from '@/lib/types/booking';
 import type { Payment } from '@/lib/types/payment';
@@ -112,7 +113,7 @@ export function FinalBillModal({ booking, currentUser, payments, onClose }: Prop
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-            <div><label className="text-xs text-stone-600 uppercase tracking-wider block mb-1">Bill Date *</label><input type="date" value={form.billDate} onChange={e => setForm(f => ({ ...f, billDate: e.target.value }))} className="w-full px-3 py-2 border border-stone-300 text-sm outline-none bg-white" /></div>
+            <div><label className="text-xs text-stone-600 uppercase tracking-wider block mb-1">Bill Date *</label><DateInput value={form.billDate} onChange={v => setForm(f => ({ ...f, billDate: v }))} className="w-full" /></div>
             <div className="flex items-end pb-2"><label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={form.isBTC} onChange={e => setForm(f => ({ ...f, isBTC: e.target.checked }))} /><span className="text-sm">Bill to Company (BTC)</span></label></div>
           </div>
 
@@ -143,7 +144,7 @@ export function FinalBillModal({ booking, currentUser, payments, onClose }: Prop
             <div className="bg-blue-50 border border-blue-200 p-4 space-y-3">
               <h4 className="text-xs uppercase tracking-wider text-blue-900 font-medium">Record Additional Payment</h4>
               <div className="grid grid-cols-3 gap-3">
-                <div><label className="text-xs text-stone-600 block mb-1">Date</label><input type="date" value={payForm.paymentDate} onChange={e => setPayForm(f => ({ ...f, paymentDate: e.target.value }))} className="w-full px-2 py-1.5 border border-stone-300 text-sm bg-white" /></div>
+                <div><label className="text-xs text-stone-600 block mb-1">Date</label><DateInput value={payForm.paymentDate} onChange={v => setPayForm(f => ({ ...f, paymentDate: v }))} className="w-full" /></div>
                 <div><label className="text-xs text-stone-600 block mb-1">Amount (₹)</label><input type="number" value={payForm.amount} onChange={e => setPayForm(f => ({ ...f, amount: Number(e.target.value) }))} className="w-full px-2 py-1.5 border border-stone-300 text-sm bg-white" /></div>
                 <div><label className="text-xs text-stone-600 block mb-1">Mode</label><select value={payForm.mode} onChange={e => setPayForm(f => ({ ...f, mode: e.target.value }))} className="w-full px-2 py-1.5 border border-stone-300 text-sm bg-white">{PAYMENT_MODES.map(m => <option key={m} value={m}>{m}</option>)}</select></div>
               </div>

@@ -21,6 +21,7 @@ const BookingModal = dynamic(() => import('@/components/bookings/BookingModal').
 const BlockModal = dynamic(() => import('@/components/bookings/BlockModal').then(m => ({ default: m.BlockModal })), { ssr: false });
 const PaymentModal = dynamic(() => import('@/components/payments/PaymentModal').then(m => ({ default: m.PaymentModal })), { ssr: false });
 const FinalBillModal = dynamic(() => import('@/components/front-office/FinalBillModal').then(m => ({ default: m.FinalBillModal })), { ssr: false });
+const EnquiryModal = dynamic(() => import('@/components/enquiries/EnquiryModal').then(m => ({ default: m.EnquiryModal })), { ssr: false });
 
 interface Props {
   bookings: Booking[];
@@ -49,6 +50,7 @@ export function DashboardClient({ bookings, payments, users, currentUser, today 
   const isAccounts = role === 'Accounts';
 
   const [showNewBooking, setShowNewBooking] = useState(false);
+  const [showNewEnquiry, setShowNewEnquiry] = useState(false);
   const [showBlock, setShowBlock] = useState(false);
   const [paymentFor, setPaymentFor] = useState<Booking | null>(null);
   const [finalBillFor, setFinalBillFor] = useState<Booking | null>(null);
@@ -152,6 +154,9 @@ export function DashboardClient({ bookings, payments, users, currentUser, today 
         </div>
         {(isSales || isAdmin) && (
           <div className="flex gap-2">
+            <button onClick={() => setShowNewEnquiry(true)} className="border-2 border-emerald-800 text-emerald-800 hover:bg-emerald-50 px-4 py-2 text-sm tracking-wider flex items-center gap-2 transition rounded-lg font-medium">
+              <Plus size={15} /> NEW ENQUIRY
+            </button>
             <button onClick={() => setShowBlock(true)} className="border-2 border-amber-500 text-amber-700 hover:bg-amber-50 px-4 py-2 text-sm tracking-wider flex items-center gap-2 transition rounded-lg font-medium">
               <Calendar size={15} /> BLOCK ROOMS
             </button>
@@ -585,6 +590,7 @@ export function DashboardClient({ bookings, payments, users, currentUser, today 
 
       {/* Modals */}
       {showNewBooking && <BookingModal users={users} currentUser={currentUser} existingBookings={bookings} onClose={() => setShowNewBooking(false)} />}
+      {showNewEnquiry && <EnquiryModal users={users} currentUser={currentUser} onClose={() => setShowNewEnquiry(false)} />}
       {showBlock && <BlockModal currentUser={currentUser} existingBookings={bookings} onClose={() => setShowBlock(false)} />}
       {paymentFor && <PaymentModal booking={paymentFor} currentUser={currentUser} payments={payments.filter(p => p.bookingId === paymentFor.id)} onClose={() => setPaymentFor(null)} />}
       {finalBillFor && <FinalBillModal booking={finalBillFor} currentUser={currentUser} payments={payments.filter(p => p.bookingId === finalBillFor.id)} onClose={() => setFinalBillFor(null)} />}

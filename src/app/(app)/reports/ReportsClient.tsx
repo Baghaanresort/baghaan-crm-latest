@@ -4,6 +4,7 @@ import { useState, useMemo } from 'react';
 import { Download } from 'lucide-react';
 import { getEffectiveStatus, getBookingPaymentStatus } from '@/lib/utils/booking';
 import { fmtDate } from '@/lib/utils/date';
+import { DateInput } from '@/components/ui/DateInput';
 import { TOTAL_ROOMS as TR } from '@/lib/constants/rooms';
 import { ENQUIRY_STATUSES } from '@/lib/constants/enquiry';
 import type { Booking } from '@/lib/types/booking';
@@ -123,9 +124,9 @@ export function ReportsClient({ bookings, payments, enquiries }: Props) {
         {/* Date range */}
         <div className="flex items-center gap-2">
           <label className="text-xs text-stone-500 uppercase tracking-wider">From</label>
-          <input type="date" value={from} onChange={e => setFrom(e.target.value)} className="px-3 py-2 border border-stone-300 text-sm bg-white outline-none" />
+          <DateInput value={from} onChange={v => setFrom(v)} className="min-w-[150px]" />
           <label className="text-xs text-stone-500 uppercase tracking-wider">To</label>
-          <input type="date" value={to} onChange={e => setTo(e.target.value)} className="px-3 py-2 border border-stone-300 text-sm bg-white outline-none" />
+          <DateInput value={to} onChange={v => setTo(v)} className="min-w-[150px]" />
         </div>
       </div>
 

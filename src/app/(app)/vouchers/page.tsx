@@ -11,7 +11,16 @@ export default async function VouchersPage() {
   const { data: profile } = await supabase.from('profiles').select('name, role').eq('id', user.id).single();
   if (!profile) redirect('/login');
 
-  const bookings = await getBookings();
+  const [bookings, usersData] = await Promise.all([
+    getBookings(),
+    supabase.from('profiles').select('name, role').in('role', ['Admin', 'Sales', 'Accounts', 'Front Office']),
+  ]);
 
-  return <VouchersClient initialBookings={bookings} currentUser={{ id: user.id, name: profile.name as string, role: profile.role as UserRole }} />;
+  return (
+    <VouchersClient
+      initialBookings={bookings}
+      users={(usersData.data ?? []) as Array<{ name: string; role: string }>}
+      currentUser={{ id: user.id, name: profile.name as string, role: profile.role as UserRole }}
+    />
+  );
 }

@@ -7,6 +7,7 @@ import { ok, err, type ActionResult } from '@/lib/types/result';
 import { BookingSchema, FinalBillSchema, BlockRoomSchema } from '@/lib/validations/booking';
 import { bookingToDb, dbToBooking } from '@/lib/mappers/booking';
 import { generateConfirmationNumber } from '@/lib/utils/booking';
+import { checkRoomConflict } from '@/lib/utils/conflict';
 import type { Booking, FinalBill } from '@/lib/types/booking';
 
 // ---------- Helpers ----------
@@ -46,33 +47,6 @@ function revalidateAll() {
   revalidatePath('/front-office');
   revalidatePath('/accounts');
   revalidatePath('/vouchers');
-}
-
-async function checkRoomConflict(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  rooms: string[],
-  arrival: string,
-  departure: string,
-  excludeBookingId?: string
-): Promise<string | null> {
-  if (!rooms.length) return null;
-
-  let query = supabase
-    .from('bookings')
-    .select('confirmation_number, guest_name, arrival, departure, rooms')
-    .neq('status', 'cancelled')
-    .lt('arrival', departure)
-    .gt('departure', arrival)
-    .overlaps('rooms', rooms);
-
-  if (excludeBookingId) query = query.neq('id', excludeBookingId);
-
-  const { data, error } = await query.limit(1);
-  if (error) { console.error('[checkRoomConflict]', error); return null; }
-  if (!data || data.length === 0) return null;
-
-  const c = data[0] as { confirmation_number: string; guest_name: string; arrival: string; departure: string };
-  return `Room already booked: ${c.guest_name} (${c.confirmation_number}) is in one of these rooms from ${c.arrival} to ${c.departure}.`;
 }
 
 // ---------- createBooking ----------

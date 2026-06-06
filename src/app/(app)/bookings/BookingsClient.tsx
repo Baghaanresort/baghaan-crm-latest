@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useTransition, useEffect } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { Plus, Calendar, Search, Trash2, Edit2, FileText, Download, MessageCircle } from 'lucide-react';
+import { Plus, Calendar, Search, Trash2, Edit2, FileText, Eye, Download, MessageCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { deleteBooking } from '@/lib/actions/bookings';
 import { getEffectiveStatus, getBookingPaymentStatus } from '@/lib/utils/booking';
@@ -25,6 +25,15 @@ interface Props {
   currentUser: { id: string; name: string; role: UserRole };
 }
 
+const STATUS_TABS = [
+  { key: 'all', label: 'All', dot: '' },
+  { key: 'hold', label: 'On Hold', dot: 'bg-amber-500' },
+  { key: 'pending_verification', label: 'Pending Verification', dot: 'bg-purple-500' },
+  { key: 'upcoming', label: 'Confirmed', dot: 'bg-blue-500' },
+  { key: 'inhouse', label: 'In House', dot: 'bg-emerald-600' },
+  { key: 'past', label: 'Checked Out', dot: 'bg-stone-400' },
+] as const;
+
 export function BookingsClient({ initialBookings, initialPayments, users, currentUser }: Props) {
   const today = todayISO();
   const role = currentUser.role;
@@ -35,8 +44,10 @@ export function BookingsClient({ initialBookings, initialPayments, users, curren
   const isFO = role === 'Front Office';
   const isOp = ['Kitchen', 'F&B'].includes(role);
 
-  const [bookings] = useState(initialBookings);
-  const [payments] = useState(initialPayments);
+  // Read straight from props (not frozen useState) so router.refresh() — fired on
+  // tab activation and after mutations — surfaces fresh server data without a reload.
+  const bookings = initialBookings;
+  const payments = initialPayments;
   const [search, setSearch] = useState('');
   const [filterAgent, setFilterAgent] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
@@ -46,18 +57,20 @@ export function BookingsClient({ initialBookings, initialPayments, users, curren
   const [showNew, setShowNew] = useState(false);
   const [showBlock, setShowBlock] = useState(false);
   const [editBooking, setEditBooking] = useState<Booking | null>(null);
+  const [editHold, setEditHold] = useState<Booking | null>(null);
+  const [convertHold, setConvertHold] = useState<Booking | null>(null);
   const [paymentFor, setPaymentFor] = useState<Booking | null>(null);
-  const [voucherFor, setVoucherFor] = useState<Booking | null>(null);
   const [finalBillFor, setFinalBillFor] = useState<Booking | null>(null);
-  const [convertPrefill, setConvertPrefill] = useState<{ guestName: string; contactNumber: string; email: string; sourceEnquiryId: string } | null>(null);
+  const [convertPrefill, setConvertPrefill] = useState<{ guestName: string; contactNumber: string; email: string; remarks: string; sourceEnquiryId: string } | null>(null);
 
   useEffect(() => {
     const convertId = searchParams.get('convert');
     const name = searchParams.get('name');
     const phone = searchParams.get('phone');
     const email = searchParams.get('email');
+    const remarks = searchParams.get('remarks');
     if (convertId && name && phone) {
-      setConvertPrefill({ guestName: name, contactNumber: phone, email: email ?? '', sourceEnquiryId: convertId });
+      setConvertPrefill({ guestName: name, contactNumber: phone, email: email ?? '', remarks: remarks ?? '', sourceEnquiryId: convertId });
       setShowNew(true);
       router.replace('/bookings');
     }
@@ -70,6 +83,33 @@ export function BookingsClient({ initialBookings, initialPayments, users, curren
     Array.from(new Set(users.map(u => u.name))).filter(Boolean),
     [users]
   );
+
+  // KPI strip
+  const kpis = useMemo(() => {
+    let arrivingToday = 0, inHouseNow = 0, departingToday = 0, onHold = 0;
+    bookings.forEach(b => {
+      const eff = getEffectiveStatus(b, payments);
+      if (b.arrival === today) arrivingToday++;
+      if (b.arrival <= today && b.departure > today && eff === 'confirmed') inHouseNow++;
+      if (b.departure === today) departingToday++;
+      if (eff === 'hold') onHold++;
+    });
+    return { total: bookings.length, arrivingToday, inHouseNow, departingToday, onHold };
+  }, [bookings, payments, today]);
+
+  // Counts for status pill tabs
+  const statusCounts = useMemo(() => {
+    const c: Record<string, number> = { all: bookings.length, hold: 0, pending_verification: 0, upcoming: 0, inhouse: 0, past: 0 };
+    bookings.forEach(b => {
+      const eff = getEffectiveStatus(b, payments);
+      if (eff === 'hold') c['hold']!++;
+      if (eff === 'pending_verification') c['pending_verification']!++;
+      if (b.arrival > today && eff === 'confirmed') c['upcoming']!++;
+      if (b.arrival <= today && b.departure > today && eff === 'confirmed') c['inhouse']!++;
+      if (b.departure <= today) c['past']!++;
+    });
+    return c;
+  }, [bookings, payments, today]);
 
   const filtered = useMemo(() => {
     return bookings.filter(b => {
@@ -96,11 +136,11 @@ export function BookingsClient({ initialBookings, initialPayments, users, curren
   }, [bookings, search, filterAgent, filterStatus, filterPayment, today]);
 
   const handleDelete = (id: string) => {
-    if (!confirm('Delete this booking? This cannot be undone.')) return;
+    if (!confirm('Delete this reservation? This cannot be undone.')) return;
     startTransition(async () => {
       const result = await deleteBooking(id);
       if (!result.success) { toast.error(result.error); return; }
-      toast.success('Booking deleted');
+      toast.success('Reservation deleted');
     });
   };
 
@@ -109,11 +149,16 @@ export function BookingsClient({ initialBookings, initialPayments, users, curren
     win?.addEventListener('load', () => setTimeout(() => win.print(), 300));
   };
 
+  const handleView = (b: Booking) => {
+    window.open(`/api/print/voucher?bookingId=${b.id}`, '_blank', 'noopener,noreferrer');
+  };
+
   return (
     <div>
+      {/* Header */}
       <div className="flex items-end justify-between mb-6 pb-4 border-b border-stone-300">
         <div>
-          <h2 className="text-2xl text-emerald-900" style={{ fontFamily: "'Cormorant Garamond', serif", fontWeight: 600 }}>All Bookings</h2>
+          <h2 className="text-2xl text-emerald-900" style={{ fontFamily: "'Cormorant Garamond', serif", fontWeight: 600 }}>Reservations</h2>
           <p className="text-sm text-stone-500 italic">{filtered.length} of {bookings.length} reservations</p>
         </div>
         <div className="flex gap-2">
@@ -125,48 +170,72 @@ export function BookingsClient({ initialBookings, initialPayments, users, curren
               <button onClick={() => setShowBlock(true)} className="bg-white border-2 border-amber-600 text-amber-700 hover:bg-amber-50 px-4 py-2.5 text-sm tracking-wider flex items-center gap-2 transition">
                 <Calendar size={16} /> BLOCK ROOMS
               </button>
-              <button onClick={() => setShowNew(true)} className="bg-amber-600 hover:bg-amber-700 text-white px-5 py-2.5 text-sm tracking-wider flex items-center gap-2 transition">
-                <Plus size={16} /> NEW BOOKING
+              <button onClick={() => setShowNew(true)} className="bg-emerald-900 hover:bg-emerald-800 text-amber-100 px-5 py-2.5 text-sm tracking-wider flex items-center gap-2 transition">
+                <Plus size={16} /> NEW RESERVATION
               </button>
             </>
           )}
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="flex gap-3 mb-4 flex-wrap">
-        <div className="flex-1 relative min-w-[240px]">
-          <Search size={14} className="absolute left-3 top-3 text-stone-400" />
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by name, phone, confirmation #, email..."
-            className="w-full pl-9 pr-3 py-2 border border-stone-300 text-sm focus:border-emerald-700 outline-none bg-white" />
+      {/* KPI Strip */}
+      <div className="grid grid-cols-5 gap-3 mb-5">
+        {[
+          { label: 'Total Reservations', val: kpis.total, color: 'text-stone-800' },
+          { label: 'Arriving Today', val: kpis.arrivingToday, color: 'text-blue-700' },
+          { label: 'In House', val: kpis.inHouseNow, color: 'text-emerald-700' },
+          { label: 'Departing Today', val: kpis.departingToday, color: 'text-amber-700' },
+          { label: 'On Hold', val: kpis.onHold, color: kpis.onHold > 0 ? 'text-orange-600' : 'text-stone-500' },
+        ].map(({ label, val, color }) => (
+          <div key={label} className="bg-white border border-stone-200 p-4">
+            <div className="text-xs text-stone-500 uppercase tracking-wider">{label}</div>
+            <div className={`text-2xl mt-1 font-semibold ${color}`} style={{ fontFamily: "'Cormorant Garamond', serif" }}>{val}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Status pill tabs + filter row */}
+      <div className="mb-4 space-y-3">
+        <div className="flex gap-1.5 flex-wrap">
+          {STATUS_TABS.map(({ key, label, dot }) => (
+            <button
+              key={key}
+              onClick={() => setFilterStatus(key)}
+              className={`px-3 py-1.5 text-xs tracking-wider transition flex items-center gap-1.5 ${filterStatus === key ? 'bg-emerald-900 text-amber-100' : 'bg-white border border-stone-300 text-stone-600 hover:bg-stone-50'}`}
+            >
+              {dot && <span className={`w-1.5 h-1.5 rounded-full ${dot}`} />}
+              {label}
+              <span className={`${filterStatus === key ? 'text-amber-300' : 'text-stone-400'}`}>({statusCounts[key] ?? 0})</span>
+            </button>
+          ))}
         </div>
-        <select value={filterAgent} onChange={e => setFilterAgent(e.target.value)} className="px-3 py-2 border border-stone-300 text-sm bg-white outline-none">
-          <option value="all">All Agents</option>
-          {agentNames.map(a => <option key={a} value={a}>{a}</option>)}
-        </select>
-        <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="px-3 py-2 border border-stone-300 text-sm bg-white outline-none">
-          <option value="all">All Statuses</option>
-          <option value="hold">On Hold</option>
-          <option value="pending_verification">Pending Verification</option>
-          <option value="upcoming">Confirmed Upcoming</option>
-          <option value="inhouse">In House</option>
-          <option value="past">Past</option>
-        </select>
-        {!isOp && (
-          <select value={filterPayment} onChange={e => setFilterPayment(e.target.value)} className="px-3 py-2 border border-stone-300 text-sm bg-white outline-none">
-            <option value="all">All Payment Statuses</option>
-            <option value="unpaid">Unpaid</option>
-            <option value="partial">Partial Paid</option>
-            <option value="paid">Fully Paid</option>
-            <option value="overpaid">Overpaid</option>
+
+        <div className="flex gap-3 flex-wrap">
+          <div className="flex-1 relative min-w-[240px]">
+            <Search size={14} className="absolute left-3 top-3 text-stone-400" />
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by name, phone, confirmation #..."
+              className="w-full pl-9 pr-3 py-2 border border-stone-300 text-sm focus:border-emerald-700 outline-none bg-white" />
+          </div>
+          <select value={filterAgent} onChange={e => setFilterAgent(e.target.value)} className="px-3 py-2 border border-stone-300 text-sm bg-white outline-none">
+            <option value="all">All Owners</option>
+            {agentNames.map(a => <option key={a} value={a}>{a}</option>)}
           </select>
-        )}
+          {!isOp && (
+            <select value={filterPayment} onChange={e => setFilterPayment(e.target.value)} className="px-3 py-2 border border-stone-300 text-sm bg-white outline-none">
+              <option value="all">All Payment Statuses</option>
+              <option value="unpaid">Unpaid</option>
+              <option value="partial">Partially Paid</option>
+              <option value="paid">Fully Settled</option>
+              <option value="overpaid">Overpaid</option>
+            </select>
+          )}
+        </div>
       </div>
 
       {/* Table */}
       <div className="bg-white border border-stone-200 overflow-x-auto">
         {filtered.length === 0 ? (
-          <div className="p-12 text-center text-stone-400 italic">No bookings match your filters</div>
+          <div className="p-12 text-center text-stone-400 italic">No reservations match your filters</div>
         ) : (
           <table className="w-full text-sm">
             <thead className="bg-emerald-900 text-amber-100">
@@ -178,7 +247,7 @@ export function BookingsClient({ initialBookings, initialPayments, users, curren
                 {!isOp && <th className="text-right p-3 text-xs uppercase tracking-wider">Total</th>}
                 {!isOp && <th className="text-right p-3 text-xs uppercase tracking-wider">Paid</th>}
                 {!isOp && <th className="text-right p-3 text-xs uppercase tracking-wider">Balance</th>}
-                <th className="text-left p-3 text-xs uppercase tracking-wider">Agent</th>
+                <th className="text-left p-3 text-xs uppercase tracking-wider">Owner</th>
                 <th className="text-right p-3 text-xs uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
@@ -187,53 +256,95 @@ export function BookingsClient({ initialBookings, initialPayments, users, curren
                 const ps = pStats(b);
                 const eff = effStatus(b);
                 const timeStatus = b.departure <= today ? 'past' : b.arrival <= today ? 'inhouse' : 'upcoming';
+
                 let statusColor = 'bg-stone-100 text-stone-600';
-                let statusLabel = 'Past';
-                if (eff === 'hold') { statusColor = 'bg-amber-100 text-amber-800'; statusLabel = 'On Hold'; }
-                else if (eff === 'pending_verification') { statusColor = 'bg-purple-100 text-purple-800'; statusLabel = 'Pending Verification'; }
-                else if (timeStatus === 'inhouse') { statusColor = 'bg-emerald-100 text-emerald-800'; statusLabel = 'In House'; }
-                else if (timeStatus === 'upcoming') { statusColor = 'bg-blue-100 text-blue-800'; statusLabel = 'Confirmed'; }
-                const payColor = ps.balance <= 0 ? 'text-emerald-700' : ps.totalPaid > 0 ? 'text-amber-700' : 'text-red-700';
+                let statusLabel = 'Checked Out';
+                let statusDot = 'bg-stone-400';
+                if (eff === 'hold') { statusColor = 'bg-amber-100 text-amber-800'; statusLabel = 'On Hold'; statusDot = 'bg-amber-500'; }
+                else if (eff === 'pending_verification') { statusColor = 'bg-purple-100 text-purple-800'; statusLabel = 'Pending Verification'; statusDot = 'bg-purple-500'; }
+                else if (timeStatus === 'inhouse') { statusColor = 'bg-emerald-100 text-emerald-800'; statusLabel = 'In House'; statusDot = 'bg-emerald-600'; }
+                else if (timeStatus === 'upcoming') { statusColor = 'bg-blue-100 text-blue-800'; statusLabel = 'Confirmed'; statusDot = 'bg-blue-500'; }
+
+                let payBadgeLabel = 'Unpaid';
+                let payBadgeColor = 'bg-red-100 text-red-700';
+                if (ps.totalUnverified > 0 && ps.totalPaid === 0) { payBadgeLabel = 'Awaiting Verification'; payBadgeColor = 'bg-purple-100 text-purple-700'; }
+                else if (ps.balance <= 0) { payBadgeLabel = 'Settled'; payBadgeColor = 'bg-emerald-100 text-emerald-700'; }
+                else if (ps.totalPaid > 0) { payBadgeLabel = 'Partially Paid'; payBadgeColor = 'bg-amber-100 text-amber-700'; }
+
+                const rowHighlight = eff === 'hold' ? 'bg-amber-50/30' : eff === 'pending_verification' ? 'bg-purple-50/30' : '';
+
                 return (
-                  <tr key={b.id} className={`border-t border-stone-100 hover:bg-stone-50 ${eff === 'hold' ? 'bg-amber-50/40' : eff === 'pending_verification' ? 'bg-purple-50/40' : ''}`}>
+                  <tr key={b.id} className={`border-t border-stone-100 hover:bg-stone-50 transition-colors ${rowHighlight}`}>
                     <td className="p-3">
-                      <div className="font-mono text-xs">{b.confirmationNumber}</div>
-                      {b.sourceEnquiryId && <div className="text-xs text-blue-600 mt-0.5">↙ From Enquiry</div>}
+                      <div className="font-mono text-xs text-stone-700">{b.confirmationNumber}</div>
+                      {b.sourceEnquiryId && <div className="text-xs text-blue-600 mt-0.5">↙ Lead</div>}
                     </td>
                     <td className="p-3">
-                      <div className="font-medium">{b.guestName}</div>
-                      <a href={buildWaLink(b.contactNumber, WA_TEMPLATES.enquiryGreeting(b.guestName))} target="_blank" rel="noopener noreferrer" className="text-xs text-stone-500 hover:text-green-700 flex items-center gap-1">
+                      <div className="font-medium text-stone-900">{b.guestName}</div>
+                      <a href={buildWaLink(b.contactNumber, WA_TEMPLATES.enquiryGreeting(b.guestName))} target="_blank" rel="noopener noreferrer"
+                        className="text-xs text-stone-500 hover:text-green-700 flex items-center gap-1 w-fit transition-colors">
                         <MessageCircle size={11} /> {b.contactNumber}
                       </a>
-                      {b.companyName && <div className="text-xs text-stone-500 italic">{b.companyName}</div>}
+                      {b.companyName && <div className="text-xs text-stone-400 italic mt-0.5">{b.companyName}</div>}
                     </td>
                     <td className="p-3 text-xs">
-                      <div>{fmtDate(b.arrival)} → {fmtDate(b.departure)}</div>
-                      <div className="text-stone-500">{b.nights}n · {b.rooms?.length} rooms · {b.adults}A/{b.children}C</div>
+                      <div className="text-stone-800">{fmtDate(b.arrival)} → {fmtDate(b.departure)}</div>
+                      <div className="text-stone-500 mt-0.5">{b.nights}n · {b.rooms?.length} rooms · {b.adults}A{b.children > 0 ? `/${b.children}C` : ''}</div>
                     </td>
                     <td className="p-3">
-                      <span className={`text-xs px-2 py-0.5 ${statusColor}`}>{statusLabel}</span>
+                      <span className={`text-xs px-2 py-0.5 inline-flex items-center gap-1 ${statusColor}`}>
+                        <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${statusDot}`} />
+                        {statusLabel}
+                      </span>
+                      {!isOp && (
+                        <div className="mt-1">
+                          <span className={`text-xs px-1.5 py-0.5 ${payBadgeColor}`}>{payBadgeLabel}</span>
+                        </div>
+                      )}
                     </td>
-                    {!isOp && <td className="p-3 text-right">₹{b.totalAmount.toLocaleString('en-IN')}</td>}
-                    {!isOp && <td className={`p-3 text-right ${payColor}`}>₹{ps.totalPaid.toLocaleString('en-IN')}</td>}
-                    {!isOp && <td className={`p-3 text-right ${payColor}`}>₹{ps.balance.toLocaleString('en-IN')}</td>}
+                    {!isOp && <td className="p-3 text-right text-stone-700 text-xs">₹{b.totalAmount.toLocaleString('en-IN')}</td>}
+                    {!isOp && (
+                      <td className={`p-3 text-right text-xs ${ps.totalPaid > 0 ? 'text-emerald-700' : 'text-stone-400'}`}>
+                        ₹{ps.totalPaid.toLocaleString('en-IN')}
+                      </td>
+                    )}
+                    {!isOp && (
+                      <td className={`p-3 text-right text-xs font-medium ${ps.balance <= 0 ? 'text-emerald-700' : ps.totalPaid > 0 ? 'text-amber-700' : 'text-red-700'}`}>
+                        ₹{ps.balance.toLocaleString('en-IN')}
+                      </td>
+                    )}
                     <td className="p-3 text-xs text-stone-500">{b.createdBy}</td>
                     <td className="p-3 text-right">
-                      <div className="flex gap-1 justify-end">
+                      <div className="flex gap-1 justify-end items-center">
                         {(isSales || isFO || isAdmin) && (
                           <>
-                            <button onClick={() => setEditBooking(b)} title="Edit" className="p-1.5 hover:bg-stone-100 text-stone-600 rounded"><Edit2 size={13} /></button>
-                            <button onClick={() => setPaymentFor(b)} title="Payment" className="text-xs bg-emerald-700 text-white px-2 py-1 hover:bg-emerald-800">+PAY</button>
+                            <button onClick={() => b.status === 'hold' ? setEditHold(b) : setEditBooking(b)} title={b.status === 'hold' ? 'Edit hold' : 'Edit reservation'} className="p-1.5 hover:bg-stone-100 text-stone-600 rounded transition-colors">
+                              <Edit2 size={13} />
+                            </button>
+                            <button onClick={() => setPaymentFor(b)} title="Add payment" className="text-xs bg-emerald-700 text-white px-2 py-1 hover:bg-emerald-800 transition-colors">
+                              +PAY
+                            </button>
                           </>
                         )}
                         {(isFO || isAdmin) && (
-                          <button onClick={() => setFinalBillFor(b)} title="Final Bill" className="text-xs bg-blue-700 text-white px-2 py-1 hover:bg-blue-800">BILL</button>
+                          <button onClick={() => setFinalBillFor(b)} title="Final bill" className="text-xs bg-blue-700 text-white px-2 py-1 hover:bg-blue-800 transition-colors">
+                            BILL
+                          </button>
                         )}
                         {(isSales || isFO || isAdmin) && (
-                          <button onClick={() => handlePrint(b)} title="Print Voucher" className="p-1.5 hover:bg-stone-100 text-stone-600 rounded"><FileText size={13} /></button>
+                          <>
+                            <button onClick={() => handleView(b)} title="View voucher" className="p-1.5 hover:bg-stone-100 text-stone-600 rounded transition-colors">
+                              <Eye size={13} />
+                            </button>
+                            <button onClick={() => handlePrint(b)} title="Print voucher" className="p-1.5 hover:bg-stone-100 text-stone-600 rounded transition-colors">
+                              <FileText size={13} />
+                            </button>
+                          </>
                         )}
                         {isAdmin && (
-                          <button onClick={() => handleDelete(b.id)} disabled={isPending} title="Delete" className="p-1.5 hover:bg-red-100 text-red-600 rounded disabled:opacity-50"><Trash2 size={13} /></button>
+                          <button onClick={() => handleDelete(b.id)} disabled={isPending} title="Delete reservation" className="p-1.5 hover:bg-red-100 text-red-600 rounded disabled:opacity-50 transition-colors">
+                            <Trash2 size={13} />
+                          </button>
                         )}
                       </div>
                     </td>
@@ -247,6 +358,8 @@ export function BookingsClient({ initialBookings, initialPayments, users, curren
 
       {showNew && <BookingModal users={users} currentUser={currentUser} existingBookings={bookings} prefill={convertPrefill} sourceEnquiryId={convertPrefill?.sourceEnquiryId ?? null} onClose={() => { setShowNew(false); setConvertPrefill(null); }} />}
       {showBlock && <BlockModal currentUser={currentUser} existingBookings={bookings} onClose={() => setShowBlock(false)} />}
+      {editHold && <BlockModal booking={editHold} currentUser={currentUser} existingBookings={bookings} onConvert={(h) => { setEditHold(null); setConvertHold(h); }} onClose={() => setEditHold(null)} />}
+      {convertHold && <BookingModal booking={convertHold} convertFromHold users={users} currentUser={currentUser} existingBookings={bookings} onClose={() => setConvertHold(null)} />}
       {editBooking && <BookingModal booking={editBooking} users={users} currentUser={currentUser} existingBookings={bookings} onClose={() => setEditBooking(null)} />}
       {paymentFor && <PaymentModal booking={paymentFor} currentUser={currentUser} payments={payments.filter(p => p.bookingId === paymentFor.id)} onClose={() => setPaymentFor(null)} />}
       {finalBillFor && <FinalBillModal booking={finalBillFor} currentUser={currentUser} payments={payments.filter(p => p.bookingId === finalBillFor.id)} onClose={() => setFinalBillFor(null)} />}
