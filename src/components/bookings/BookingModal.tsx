@@ -9,6 +9,7 @@ import { markEnquiryConverted } from '@/lib/actions/enquiries';
 import { ROOM_INVENTORY, DEFAULT_RATES, getRoomCategory } from '@/lib/constants/rooms';
 import { datesInRange, isoDate, daysBetween, todayISO, addDays } from '@/lib/utils/date';
 import { DateInput } from '@/components/ui/DateInput';
+import { NumberInput } from '@/components/ui/NumberInput';
 import type { Booking } from '@/lib/types/booking';
 
 interface Props {
@@ -300,6 +301,13 @@ function Field({ label, value, onChange, type = 'text', textarea, rows = 3, read
           min={min !== undefined ? String(min) : undefined}
           readOnly={readOnly}
           className="w-full"
+        />
+      ) : type === 'number' && !readOnly ? (
+        <NumberInput
+          value={typeof value === 'number' ? value : Number(value ?? 0)}
+          onChange={n => onChange?.(String(n))}
+          min={typeof min === 'number' ? min : undefined}
+          className="w-full px-3 py-2 border border-stone-300 text-sm outline-none focus:border-emerald-700 transition bg-white"
         />
       ) : (
         <input type={type} value={value ?? ''} onChange={e => onChange?.(e.target.value)} readOnly={readOnly} min={min}

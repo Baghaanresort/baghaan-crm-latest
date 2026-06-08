@@ -8,6 +8,7 @@ import { updateBooking } from '@/lib/actions/bookings';
 import { ROOM_INVENTORY } from '@/lib/constants/rooms';
 import { datesInRange, isoDate, daysBetween, todayISO, addDays } from '@/lib/utils/date';
 import { DateInput } from '@/components/ui/DateInput';
+import { NumberInput } from '@/components/ui/NumberInput';
 import type { Booking } from '@/lib/types/booking';
 
 interface Props {
@@ -126,7 +127,7 @@ export function CorporateBookingModal({ booking, users, currentUser, existingBoo
           <div className="grid grid-cols-3 gap-4">
             {(['single', 'double', 'triple'] as const).map(type => (
               <div key={type}><label className="text-xs text-stone-600 uppercase tracking-wider block mb-1">{type === 'single' ? 'Single Share' : type === 'double' ? 'Double Share' : 'Triple Share'} guests</label>
-                <input type="number" value={form.guestCount[type]} onChange={e => setForm(f => ({ ...f, guestCount: { ...f.guestCount, [type]: Number(e.target.value) } }))} className="w-full px-3 py-2 border border-stone-300 text-sm outline-none bg-white" /></div>
+                <NumberInput value={form.guestCount[type]} min={0} onChange={n => setForm(f => ({ ...f, guestCount: { ...f.guestCount, [type]: n } }))} className="w-full px-3 py-2 border border-stone-300 text-sm outline-none bg-white" /></div>
             ))}
           </div>
           <div>

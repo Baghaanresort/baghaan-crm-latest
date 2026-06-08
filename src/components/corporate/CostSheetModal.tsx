@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import { updateCostSheet, sendCostSheet, markCostSheetAccepted } from '@/lib/actions/corporate';
 import { LINE_ITEM_CATALOGUE } from '@/lib/constants/catalogue';
 import { datesInRange, fmtDate, isoDate } from '@/lib/utils/date';
+import { NumberInput } from '@/components/ui/NumberInput';
 import type { Booking, LineItem } from '@/lib/types/booking';
 
 interface Props {
@@ -140,9 +141,9 @@ export function CostSheetModal({ booking, currentUser, onClose }: Props) {
                       {dayItems.map(li => (
                         <tr key={li._id} className="border-t border-stone-100">
                           <td className="p-2"><input value={li.particular} onChange={e => updateItem(li._id, 'particular', e.target.value)} className="w-full px-2 py-1 border border-stone-200 text-sm bg-white outline-none" /></td>
-                          <td className="p-2"><input type="number" value={li.rate} onChange={e => updateItem(li._id, 'rate', e.target.value)} className="w-full px-2 py-1 border border-stone-200 text-sm text-right bg-white outline-none" /></td>
-                          <td className="p-2"><input type="number" value={li.qty} onChange={e => updateItem(li._id, 'qty', e.target.value)} className="w-full px-2 py-1 border border-stone-200 text-sm text-right bg-white outline-none" /></td>
-                          <td className="p-2"><input type="number" value={li.units} onChange={e => updateItem(li._id, 'units', e.target.value)} className="w-full px-2 py-1 border border-stone-200 text-sm text-right bg-white outline-none" /></td>
+                          <td className="p-2"><NumberInput value={li.rate} min={0} onChange={n => updateItem(li._id, 'rate', String(n))} className="w-full px-2 py-1 border border-stone-200 text-sm text-right bg-white outline-none" /></td>
+                          <td className="p-2"><NumberInput value={li.qty} min={0} onChange={n => updateItem(li._id, 'qty', String(n))} className="w-full px-2 py-1 border border-stone-200 text-sm text-right bg-white outline-none" /></td>
+                          <td className="p-2"><NumberInput value={li.units} min={0} onChange={n => updateItem(li._id, 'units', String(n))} className="w-full px-2 py-1 border border-stone-200 text-sm text-right bg-white outline-none" /></td>
                           <td className="p-2 text-right font-medium">₹{(Number(li.rate ?? 0) * Number(li.qty ?? 1) * Number(li.units ?? 1)).toLocaleString('en-IN')}</td>
                           <td className="p-2"><button onClick={() => removeItem(li._id)} className="p-1 hover:bg-red-100 text-red-600 rounded"><Trash2 size={12} /></button></td>
                         </tr>
@@ -191,7 +192,7 @@ export function CostSheetModal({ booking, currentUser, onClose }: Props) {
                   {items.filter(li => !li.day || li.day === 'multi').map(li => (
                     <tr key={li._id} className="border-t border-stone-100">
                       <td className="p-2 w-2/5"><input value={li.particular} onChange={e => updateItem(li._id, 'particular', e.target.value)} className="w-full px-2 py-1 border border-stone-200 text-sm bg-white outline-none" /></td>
-                      <td className="p-2"><input type="number" value={li.rate} onChange={e => updateItem(li._id, 'rate', e.target.value)} className="w-24 px-2 py-1 border border-stone-200 text-sm text-right bg-white outline-none" /></td>
+                      <td className="p-2"><NumberInput value={li.rate} min={0} onChange={n => updateItem(li._id, 'rate', String(n))} className="w-24 px-2 py-1 border border-stone-200 text-sm text-right bg-white outline-none" /></td>
                       <td className="p-2 text-right font-medium">₹{(Number(li.rate ?? 0) * Number(li.qty ?? 1)).toLocaleString('en-IN')}</td>
                       <td className="p-2"><button onClick={() => removeItem(li._id)} className="p-1 hover:bg-red-100 text-red-600 rounded"><Trash2 size={12} /></button></td>
                     </tr>

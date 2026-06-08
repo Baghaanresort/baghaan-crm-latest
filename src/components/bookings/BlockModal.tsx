@@ -7,6 +7,7 @@ import { createBlockedRoom, updateBooking } from '@/lib/actions/bookings';
 import { ROOM_INVENTORY } from '@/lib/constants/rooms';
 import { datesInRange, isoDate, daysBetween, todayISO, addDays } from '@/lib/utils/date';
 import { DateInput } from '@/components/ui/DateInput';
+import { NumberInput } from '@/components/ui/NumberInput';
 import type { Booking } from '@/lib/types/booking';
 
 interface Props {
@@ -138,8 +139,8 @@ export function BlockModal({ currentUser, existingBookings, booking, onConvert, 
             <div><label className="text-xs text-stone-600 uppercase tracking-wider block mb-1">Arrival</label><DateInput value={form.arrival} onChange={v => handleArrivalChange(v)} className="w-full" /></div>
             <div><label className="text-xs text-stone-600 uppercase tracking-wider block mb-1">Departure</label><DateInput value={form.departure} min={form.arrival} onChange={v => update('departure', v)} className="w-full" /></div>
             <div><label className="text-xs text-stone-600 uppercase tracking-wider block mb-1">Nights</label><input type="number" value={form.nights} readOnly className="w-full px-3 py-2 border border-stone-300 text-sm outline-none bg-stone-100" /></div>
-            <div><label className="text-xs text-stone-600 uppercase tracking-wider block mb-1">Adults</label><input type="number" value={form.adults} onChange={e => update('adults', Number(e.target.value))} className="w-full px-3 py-2 border border-stone-300 text-sm outline-none bg-white" /></div>
-            <div><label className="text-xs text-stone-600 uppercase tracking-wider block mb-1">Children</label><input type="number" value={form.children} onChange={e => update('children', Number(e.target.value))} className="w-full px-3 py-2 border border-stone-300 text-sm outline-none bg-white" /></div>
+            <div><label className="text-xs text-stone-600 uppercase tracking-wider block mb-1">Adults</label><NumberInput value={form.adults} min={0} onChange={n => update('adults', n)} className="w-full px-3 py-2 border border-stone-300 text-sm outline-none bg-white" /></div>
+            <div><label className="text-xs text-stone-600 uppercase tracking-wider block mb-1">Children</label><NumberInput value={form.children} min={0} onChange={n => update('children', n)} className="w-full px-3 py-2 border border-stone-300 text-sm outline-none bg-white" /></div>
           </div>
 
           {/* Rooms */}
