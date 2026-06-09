@@ -8,6 +8,7 @@ import { addPayment } from '@/lib/actions/payments';
 import { PAYMENT_MODES } from '@/lib/constants/payments';
 import { fmtDate, todayISO } from '@/lib/utils/date';
 import { DateInput } from '@/components/ui/DateInput';
+import { NumberInput } from '@/components/ui/NumberInput';
 import { getBookingPaymentStatus } from '@/lib/utils/booking';
 import type { Booking } from '@/lib/types/booking';
 import type { Payment } from '@/lib/types/payment';
@@ -109,7 +110,7 @@ export function FinalBillModal({ booking, currentUser, payments, onClose }: Prop
 
           <div className="grid grid-cols-2 gap-4">
             <div><label className="text-xs text-stone-600 uppercase tracking-wider block mb-1">Bill Number *</label><input value={form.billNumber} onChange={e => setForm(f => ({ ...f, billNumber: e.target.value }))} placeholder="From your invoicing software" className="w-full px-3 py-2 border border-stone-300 text-sm outline-none bg-white" /></div>
-            <div><label className="text-xs text-stone-600 uppercase tracking-wider block mb-1">Bill Amount (₹) *</label><input type="number" value={form.totalAmount} onChange={e => setForm(f => ({ ...f, totalAmount: Number(e.target.value) }))} className="w-full px-3 py-2 border border-stone-300 text-sm outline-none bg-white" /></div>
+            <div><label className="text-xs text-stone-600 uppercase tracking-wider block mb-1">Bill Amount (₹) *</label><NumberInput value={form.totalAmount} min={0} onChange={n => setForm(f => ({ ...f, totalAmount: n }))} className="w-full px-3 py-2 border border-stone-300 text-sm outline-none bg-white" /></div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -145,7 +146,7 @@ export function FinalBillModal({ booking, currentUser, payments, onClose }: Prop
               <h4 className="text-xs uppercase tracking-wider text-blue-900 font-medium">Record Additional Payment</h4>
               <div className="grid grid-cols-3 gap-3">
                 <div><label className="text-xs text-stone-600 block mb-1">Date</label><DateInput value={payForm.paymentDate} onChange={v => setPayForm(f => ({ ...f, paymentDate: v }))} className="w-full" /></div>
-                <div><label className="text-xs text-stone-600 block mb-1">Amount (₹)</label><input type="number" value={payForm.amount} onChange={e => setPayForm(f => ({ ...f, amount: Number(e.target.value) }))} className="w-full px-2 py-1.5 border border-stone-300 text-sm bg-white" /></div>
+                <div><label className="text-xs text-stone-600 block mb-1">Amount (₹)</label><NumberInput value={payForm.amount} min={0} onChange={n => setPayForm(f => ({ ...f, amount: n }))} className="w-full px-2 py-1.5 border border-stone-300 text-sm bg-white" /></div>
                 <div><label className="text-xs text-stone-600 block mb-1">Mode</label><select value={payForm.mode} onChange={e => setPayForm(f => ({ ...f, mode: e.target.value }))} className="w-full px-2 py-1.5 border border-stone-300 text-sm bg-white">{PAYMENT_MODES.map(m => <option key={m} value={m}>{m}</option>)}</select></div>
               </div>
               <div className="flex gap-2">

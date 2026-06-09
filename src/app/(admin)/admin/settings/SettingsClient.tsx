@@ -8,6 +8,7 @@ import { createClient } from '@/lib/supabase/client';
 import { ALL_ROOMS } from '@/lib/constants/rooms';
 import { fmtDate, todayISO } from '@/lib/utils/date';
 import { DateInput } from '@/components/ui/DateInput';
+import { NumberInput } from '@/components/ui/NumberInput';
 
 interface MaintenanceBlock {
   id: string;
@@ -90,10 +91,10 @@ export function SettingsClient({ bookingCounter, piCounter, enquiryCounter, main
               <label className="text-xs text-stone-600 uppercase tracking-wider block mb-1">{label}</label>
               <p className="text-xs text-stone-400 italic mb-2">Format: {format}</p>
               <div className="flex gap-2">
-                <input
-                  type="number"
-                  value={counters[key]}
-                  onChange={e => setCounters(c => ({ ...c, [key]: parseInt(e.target.value) || 0 }))}
+                <NumberInput
+                  value={counters[key] ?? 0}
+                  min={0}
+                  onChange={n => setCounters(c => ({ ...c, [key]: Math.floor(n) }))}
                   className="flex-1 px-3 py-2 border border-stone-300 text-sm outline-none bg-white"
                 />
                 <button

@@ -12,7 +12,8 @@ export function getEffectiveStatus(booking: Booking, payments: Payment[]): Effec
 
   if (booking.bookingType === 'corporate') {
     const stage = booking.corporateStage;
-    if (stage === 'advance_paid' || stage === 'completed') return 'confirmed';
+    // Advance paid onward = a real, room-consuming reservation.
+    if (stage === 'advance_paid' || stage === 'confirmed' || stage === 'checked_in' || stage === 'completed') return 'confirmed';
     if (stage === 'cost_sheet_accepted' || stage === 'pi_generated') {
       if (totalPaid > 0) return 'confirmed';
       if (totalUnverified > 0) return 'pending_verification';

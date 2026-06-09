@@ -1,11 +1,12 @@
 'use client';
 
 import { useState, useMemo, useTransition } from 'react';
-import { X, Plus, Trash2 } from 'lucide-react';
+import { X, Plus, Trash2, Printer } from 'lucide-react';
 import { toast } from 'sonner';
 import { updateCostSheet, sendCostSheet, markCostSheetAccepted } from '@/lib/actions/corporate';
 import { LINE_ITEM_CATALOGUE } from '@/lib/constants/catalogue';
 import { datesInRange, fmtDate, isoDate } from '@/lib/utils/date';
+import { NumberInput } from '@/components/ui/NumberInput';
 import type { Booking, LineItem } from '@/lib/types/booking';
 
 interface Props {
@@ -140,9 +141,9 @@ export function CostSheetModal({ booking, currentUser, onClose }: Props) {
                       {dayItems.map(li => (
                         <tr key={li._id} className="border-t border-stone-100">
                           <td className="p-2"><input value={li.particular} onChange={e => updateItem(li._id, 'particular', e.target.value)} className="w-full px-2 py-1 border border-stone-200 text-sm bg-white outline-none" /></td>
-                          <td className="p-2"><input type="number" value={li.rate} onChange={e => updateItem(li._id, 'rate', e.target.value)} className="w-full px-2 py-1 border border-stone-200 text-sm text-right bg-white outline-none" /></td>
-                          <td className="p-2"><input type="number" value={li.qty} onChange={e => updateItem(li._id, 'qty', e.target.value)} className="w-full px-2 py-1 border border-stone-200 text-sm text-right bg-white outline-none" /></td>
-                          <td className="p-2"><input type="number" value={li.units} onChange={e => updateItem(li._id, 'units', e.target.value)} className="w-full px-2 py-1 border border-stone-200 text-sm text-right bg-white outline-none" /></td>
+                          <td className="p-2"><NumberInput value={li.rate} min={0} onChange={n => updateItem(li._id, 'rate', String(n))} className="w-full px-2 py-1 border border-stone-200 text-sm text-right bg-white outline-none" /></td>
+                          <td className="p-2"><NumberInput value={li.qty} min={0} onChange={n => updateItem(li._id, 'qty', String(n))} className="w-full px-2 py-1 border border-stone-200 text-sm text-right bg-white outline-none" /></td>
+                          <td className="p-2"><NumberInput value={li.units} min={0} onChange={n => updateItem(li._id, 'units', String(n))} className="w-full px-2 py-1 border border-stone-200 text-sm text-right bg-white outline-none" /></td>
                           <td className="p-2 text-right font-medium">₹{(Number(li.rate ?? 0) * Number(li.qty ?? 1) * Number(li.units ?? 1)).toLocaleString('en-IN')}</td>
                           <td className="p-2"><button onClick={() => removeItem(li._id)} className="p-1 hover:bg-red-100 text-red-600 rounded"><Trash2 size={12} /></button></td>
                         </tr>
@@ -191,7 +192,7 @@ export function CostSheetModal({ booking, currentUser, onClose }: Props) {
                   {items.filter(li => !li.day || li.day === 'multi').map(li => (
                     <tr key={li._id} className="border-t border-stone-100">
                       <td className="p-2 w-2/5"><input value={li.particular} onChange={e => updateItem(li._id, 'particular', e.target.value)} className="w-full px-2 py-1 border border-stone-200 text-sm bg-white outline-none" /></td>
-                      <td className="p-2"><input type="number" value={li.rate} onChange={e => updateItem(li._id, 'rate', e.target.value)} className="w-24 px-2 py-1 border border-stone-200 text-sm text-right bg-white outline-none" /></td>
+                      <td className="p-2"><NumberInput value={li.rate} min={0} onChange={n => updateItem(li._id, 'rate', String(n))} className="w-24 px-2 py-1 border border-stone-200 text-sm text-right bg-white outline-none" /></td>
                       <td className="p-2 text-right font-medium">₹{(Number(li.rate ?? 0) * Number(li.qty ?? 1)).toLocaleString('en-IN')}</td>
                       <td className="p-2"><button onClick={() => removeItem(li._id)} className="p-1 hover:bg-red-100 text-red-600 rounded"><Trash2 size={12} /></button></td>
                     </tr>
@@ -225,6 +226,13 @@ export function CostSheetModal({ booking, currentUser, onClose }: Props) {
             </div>
             <div className="flex gap-2">
               <button onClick={onClose} className="px-4 py-2 text-sm border border-stone-300 hover:bg-stone-100 tracking-wider">CLOSE</button>
+              <button
+                onClick={() => { const w = window.open(`/api/print/cost-sheet?bookingId=${booking.id}`, '_blank'); w?.addEventListener('load', () => setTimeout(() => w.print(), 300)); }}
+                className="px-4 py-2 text-sm border border-emerald-700 text-emerald-800 hover:bg-emerald-50 tracking-wider flex items-center gap-1.5"
+                title="Open the saved cost sheet as a printable PDF"
+              >
+                <Printer size={13} /> PDF
+              </button>
               <button onClick={handleSaveDraft} disabled={isPending} className="px-5 py-2 text-sm bg-stone-700 hover:bg-stone-800 text-white tracking-wider disabled:opacity-50">SAVE DRAFT</button>
               {(stage === 'inquiry' || stage === 'cost_sheet_draft') && <button onClick={handleSaveAndSend} disabled={isPending} className="px-5 py-2 text-sm bg-blue-700 hover:bg-blue-800 text-white tracking-wider disabled:opacity-50">SAVE & MARK SENT</button>}
               {stage === 'cost_sheet_sent' && <button onClick={handleSaveAndAccept} disabled={isPending} className="px-5 py-2 text-sm bg-purple-700 hover:bg-purple-800 text-white tracking-wider disabled:opacity-50">SAVE & MARK ACCEPTED</button>}

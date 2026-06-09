@@ -3,7 +3,10 @@
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { ok, err, type ActionResult } from '@/lib/types/result';
-import type { CostSheet, LineItem, ProformaInvoice } from '@/lib/types/booking';
+import { logCorporateActivity } from '@/lib/server/corporateEngine';
+import { CORPORATE_STAGES, corporateStageStep } from '@/lib/constants/corporate';
+import type { CostSheet, LineItem, ProformaInvoice, CorporateStage } from '@/lib/types/booking';
+import type { CorporateActivityEntry } from '@/lib/types/corporate-activity';
 
 async function getAuthedUser(supabase: Awaited<ReturnType<typeof createClient>>) {
   const { data: { user } } = await supabase.auth.getUser();
@@ -84,6 +87,7 @@ export async function updateCostSheet(
     return err('Failed to save cost sheet.');
   }
 
+  await logCorporateActivity(supabase, bookingId, 'cost_sheet_updated', `Cost sheet updated (v${updatedCostSheet.version}) — total ₹${newTotal.toLocaleString('en-IN')}.`, actor);
   revalidateCorporatePaths();
   return ok(undefined);
 }
@@ -127,6 +131,7 @@ export async function sendCostSheet(bookingId: string): Promise<ActionResult> {
     return err('Failed to mark cost sheet as sent.');
   }
 
+  await logCorporateActivity(supabase, bookingId, 'quote_sent', 'Quote sent to client.', actor);
   revalidateCorporatePaths();
   return ok(undefined);
 }
@@ -168,6 +173,7 @@ export async function markCostSheetAccepted(bookingId: string): Promise<ActionRe
     return err('Failed to mark cost sheet as accepted.');
   }
 
+  await logCorporateActivity(supabase, bookingId, 'quote_accepted', 'Quote accepted by client.', actor);
   revalidateCorporatePaths();
   return ok(undefined);
 }
@@ -228,6 +234,7 @@ export async function generateProformaInvoice(
 
   await supabase.from('meta').upsert({ key: 'pi_counter', value: String(newPiCounter) });
 
+  await logCorporateActivity(supabase, bookingId, 'pi_generated', `Proforma invoice ${piNumber} generated — advance ₹${advanceRequired.toLocaleString('en-IN')} required.`, actor);
   revalidateCorporatePaths();
   return ok({ piNumber });
 }
@@ -314,6 +321,133 @@ export async function createCorporateBooking(input: {
   }
 
   await supabase.from('meta').upsert({ key: 'booking_counter', value: String(newCounter) });
+  await logCorporateActivity(supabase, id, 'inquiry_created', `Inquiry created for ${input.companyName}.`, actor);
   revalidateCorporatePaths();
   return ok({ id, confirmationNumber });
+}
+
+// ---------- check-in ----------
+
+export async function checkInCorporate(bookingId: string): Promise<ActionResult> {
+  if (!bookingId) return err('Booking ID required');
+  const supabase = await createClient();
+  const actor = await getAuthedUser(supabase);
+  if (!actor) return err('Not authenticated');
+  if (!['Front Office', 'Sales', 'Admin'].includes(actor.role)) return err('Insufficient permissions');
+
+  const { data: row } = await supabase.from('bookings').select('corporate_stage, booking_type').eq('id', bookingId).single();
+  if (!row || row['booking_type'] !== 'corporate') return err('Corporate booking not found');
+  if (corporateStageStep(row['corporate_stage'] as string) < corporateStageStep('confirmed')) {
+    return err('Booking must be confirmed before check-in.');
+  }
+
+  const { error } = await supabase.from('bookings').update({ corporate_stage: 'checked_in', status: 'checked_in' }).eq('id', bookingId);
+  if (error) { console.error('[checkInCorporate]', error); return err('Failed to check in.'); }
+
+  await logCorporateActivity(supabase, bookingId, 'checked_in', 'Guests checked in.', actor);
+  revalidateCorporatePaths();
+  return ok(undefined);
+}
+
+// ---------- complete ----------
+
+export async function completeCorporate(bookingId: string): Promise<ActionResult> {
+  if (!bookingId) return err('Booking ID required');
+  const supabase = await createClient();
+  const actor = await getAuthedUser(supabase);
+  if (!actor) return err('Not authenticated');
+  if (!['Front Office', 'Sales', 'Admin'].includes(actor.role)) return err('Insufficient permissions');
+
+  const { data: row } = await supabase.from('bookings').select('corporate_stage, booking_type').eq('id', bookingId).single();
+  if (!row || row['booking_type'] !== 'corporate') return err('Corporate booking not found');
+  if (corporateStageStep(row['corporate_stage'] as string) < corporateStageStep('confirmed')) {
+    return err('Only a confirmed booking can be completed.');
+  }
+
+  const { error } = await supabase.from('bookings').update({ corporate_stage: 'completed' }).eq('id', bookingId);
+  if (error) { console.error('[completeCorporate]', error); return err('Failed to complete booking.'); }
+
+  await logCorporateActivity(supabase, bookingId, 'completed', 'Booking marked completed.', actor);
+  revalidateCorporatePaths();
+  return ok(undefined);
+}
+
+// ---------- mark lost ----------
+// A declined / dead corporate deal. Stored as status='cancelled' (frees the
+// held rooms and drops it from the active pipeline); the reason is journaled to
+// the activity log. Only allowed before the booking is confirmed — past that
+// it's a cancellation, not a lost lead.
+
+export async function markCorporateLost(bookingId: string, reason: string, note: string): Promise<ActionResult> {
+  if (!bookingId) return err('Booking ID required');
+  if (!reason.trim()) return err('Please choose a reason.');
+  const supabase = await createClient();
+  const actor = await getAuthedUser(supabase);
+  if (!actor) return err('Not authenticated');
+  if (!['Sales', 'Admin'].includes(actor.role)) return err('Only Sales and Admin can mark a deal lost');
+
+  const { data: row } = await supabase.from('bookings').select('corporate_stage, booking_type, status').eq('id', bookingId).single();
+  if (!row || row['booking_type'] !== 'corporate') return err('Corporate booking not found');
+  if (row['status'] === 'cancelled') return err('This deal is already marked lost.');
+  if (corporateStageStep(row['corporate_stage'] as string) >= corporateStageStep('confirmed')) {
+    return err('A confirmed booking cannot be marked lost — cancel it instead.');
+  }
+
+  const { error } = await supabase.from('bookings').update({ status: 'cancelled' }).eq('id', bookingId);
+  if (error) { console.error('[markCorporateLost]', error); return err('Failed to mark as lost.'); }
+
+  const message = `Marked lost — ${reason.trim()}${note.trim() ? ` · ${note.trim()}` : ''}`;
+  await logCorporateActivity(supabase, bookingId, 'lost', message, actor);
+  revalidateCorporatePaths();
+  return ok(undefined);
+}
+
+// ---------- admin stage override ----------
+// Non-admins move the stage only through the normal workflow + automation.
+
+export async function setCorporateStage(bookingId: string, stage: CorporateStage): Promise<ActionResult> {
+  if (!bookingId) return err('Booking ID required');
+  if (!CORPORATE_STAGES[stage]) return err('Invalid stage');
+
+  const supabase = await createClient();
+  const actor = await getAuthedUser(supabase);
+  if (!actor) return err('Not authenticated');
+  if (actor.role !== 'Admin') return err('Only Admin can override the stage');
+
+  const { data: row } = await supabase.from('bookings').select('booking_type').eq('id', bookingId).single();
+  if (!row || row['booking_type'] !== 'corporate') return err('Corporate booking not found');
+
+  const update: Record<string, unknown> = { corporate_stage: stage };
+  if (corporateStageStep(stage) >= corporateStageStep('confirmed')) {
+    update['status'] = stage === 'checked_in' ? 'checked_in' : 'confirmed';
+  }
+  const { error } = await supabase.from('bookings').update(update).eq('id', bookingId);
+  if (error) { console.error('[setCorporateStage]', error); return err('Failed to set stage.'); }
+
+  await logCorporateActivity(supabase, bookingId, 'stage_override', `Stage manually set to "${CORPORATE_STAGES[stage].label}" by admin.`, actor);
+  revalidateCorporatePaths();
+  return ok(undefined);
+}
+
+// ---------- activity log ----------
+
+export async function getCorporateActivity(bookingId: string): Promise<ActionResult<CorporateActivityEntry[]>> {
+  if (!bookingId) return err('Booking ID required');
+  const supabase = await createClient();
+  const actor = await getAuthedUser(supabase);
+  if (!actor) return err('Not authenticated');
+
+  const { data } = await supabase
+    .from('corporate_activity')
+    .select('id, type, message, actor, created_at')
+    .eq('booking_id', bookingId)
+    .order('created_at', { ascending: false });
+
+  return ok((data ?? []).map(r => ({
+    id: r['id'] as string,
+    type: r['type'] as string,
+    message: r['message'] as string,
+    actor: r['actor'] as string,
+    createdAt: r['created_at'] as string,
+  })));
 }

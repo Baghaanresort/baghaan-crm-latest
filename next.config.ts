@@ -12,6 +12,12 @@ const config: NextConfig = {
   images: {
     formats: ['image/avif', 'image/webp'],
   },
+  // Ensure the bundled PDF font TTFs are traced into the corporate PDF routes
+  // when deployed to serverless (Vercel/Netlify).
+  outputFileTracingIncludes: {
+    '/api/pdf/cost-sheet': ['./src/lib/pdf/fonts/**'],
+    '/api/pdf/pi': ['./src/lib/pdf/fonts/**'],
+  },
 };
 
 export default config;
