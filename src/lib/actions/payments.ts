@@ -7,7 +7,23 @@ import { ok, err, type ActionResult } from '@/lib/types/result';
 import { PaymentSchema } from '@/lib/validations/booking';
 import { paymentToDb } from '@/lib/mappers/payment';
 import { FO_AUTO_VERIFY_MODES } from '@/lib/constants/payments';
+import { logCorporateActivity, runCorporateAutomation } from '@/lib/server/corporateEngine';
 import type { Payment } from '@/lib/types/payment';
+
+// Logs a verified payment + runs corporate stage automation when the booking is
+// corporate. No-op (cheaply) for regular bookings — the engine guards on type.
+async function onPaymentVerified(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  bookingId: string,
+  amount: number,
+  actor: { id: string; name: string },
+): Promise<void> {
+  const { data: b } = await supabase.from('bookings').select('booking_type').eq('id', bookingId).single();
+  if (b?.['booking_type'] === 'corporate') {
+    await logCorporateActivity(supabase, bookingId, 'payment_verified', `Payment of ₹${amount.toLocaleString('en-IN')} verified.`, actor);
+  }
+  await runCorporateAutomation(supabase, bookingId, actor);
+}
 
 async function getAuthedUser(supabase: Awaited<ReturnType<typeof createClient>>) {
   const { data: { user } } = await supabase.auth.getUser();
@@ -73,6 +89,11 @@ export async function addPayment(
     return err('Failed to record payment. Please try again.');
   }
 
+  // FO cash/card payments are verified on the spot — run corporate automation now.
+  if (isAutoVerify) {
+    await onPaymentVerified(supabase, payment.bookingId, payment.amount, actor);
+  }
+
   revalidatePaymentPaths();
   return ok({ id });
 }
@@ -89,6 +110,8 @@ export async function verifyPayment(paymentId: string): Promise<ActionResult> {
     return err('Only Accounts and Admin can verify payments');
   }
 
+  const { data: pay } = await supabase.from('payments').select('booking_id, amount').eq('id', paymentId).single();
+
   const { error } = await supabase
     .from('payments')
     .update({
@@ -101,6 +124,10 @@ export async function verifyPayment(paymentId: string): Promise<ActionResult> {
   if (error) {
     console.error('[verifyPayment]', error);
     return err('Failed to verify payment.');
+  }
+
+  if (pay?.['booking_id']) {
+    await onPaymentVerified(supabase, pay['booking_id'] as string, Number(pay['amount'] ?? 0), actor);
   }
 
   revalidatePaymentPaths();

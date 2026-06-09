@@ -7,7 +7,10 @@ export type CorporateStage =
   | 'cost_sheet_accepted'
   | 'pi_generated'
   | 'advance_paid'
-  | 'completed';
+  | 'confirmed'
+  | 'checked_in'
+  | 'completed'
+  | 'lost'; // display-only: a lost/declined corporate deal (stored as status='cancelled')
 export type EffectiveStatus = 'confirmed' | 'hold' | 'pending_verification';
 
 export interface GuestCount {

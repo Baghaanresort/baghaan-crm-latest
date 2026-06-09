@@ -352,3 +352,146 @@ eslint findings in touched files are the pre-existing `Date.now()`-in-render / `
 / `useMemo`-dep patterns that predate this work (documented above). No automated test suite — manual
 steps per feature above. Not run against live Supabase. Working tree left **uncommitted** per your
 request.
+
+---
+
+# Third batch — Corporate Menu + corporate rules + cost-sheet PDF
+
+Business requirements: (1) a Menu (incl. Snacks) in the Corporate section, (2) no deleting records
+in the Corporate section — edit only, (3) a PDF option in the cost sheet.
+
+## Corporate Menu (single standard menu, guest-facing PDF)
+
+A standard menu the resort maintains, organised into category sections (Snacks, Starters, Main
+Course, Breads & Rice, Beverages, Desserts), printable as a branded guest-facing doc. Reached from
+a **MANAGE MENU** button on the Corporate page → `/corporate/menu`.
+
+- DB: `supabase/migrations/004_menu_items.sql` (**run manually**) — `menu_items` table; permissive
+  RW for authenticated + a RESTRICTIVE no-DELETE policy (records are never deleted, only archived).
+- Full stack mirroring the app pattern: `types/menu.ts`, `constants/menu.ts`, `mappers/menu.ts`,
+  `queries/menu.ts` (`getMenuItems`), `validations/menu.ts`, `actions/menu.ts`
+  (`createMenuItem` / `updateMenuItem` / `setMenuItemActive` — **Sales/Admin** only).
+- UI: `src/app/(app)/corporate/menu/{page.tsx,MenuClient.tsx}` — items grouped by section, add/edit
+  modal, **archive/restore** (no destructive delete, per rule #2), VIEW + PRINT/PDF.
+- Print: `src/app/api/print/menu/route.ts` + `src/lib/utils/menuPrint.ts` (`buildMenuHTML`) —
+  branded HTML grouped by section with veg/non-veg marks, optional prices; opens to print / save PDF.
+- Per-item: name (req), price (₹, optional — blank hides price), veg/non-veg, description.
+
+## No delete in Corporate section (edit only)
+
+- `src/app/(app)/corporate/CorporateClient.tsx` — removed the booking **delete** (trash) button +
+  `handleDelete` + `deleteBooking`/`Trash2` imports. Edit remains.
+- `src/lib/actions/bookings.ts` — `deleteBooking` now refuses `booking_type = 'corporate'`
+  server-side (defense in depth, same spirit as the enquiry delete lock).
+
+## Cost-sheet PDF
+
+- `src/components/corporate/CostSheetModal.tsx` — a **PDF** button in the footer opens the saved
+  cost sheet via the existing `/api/print/cost-sheet` route (print / save as PDF).
+- `CorporateClient` — also surfaced a **CS PDF** button per row when a cost sheet exists (wires the
+  previously-unused `handlePrintCostSheet`).
+
+**Process note:** went through the brainstorming skill (clarified Menu = guest-facing doc, single
+standard menu, one menu with Snacks as a section). Skipped the formal spec-doc/commit step since you
+directed implementation directly and the working tree is being kept uncommitted.
+
+**Verification:** `npx tsc --noEmit` clean (exit 0); new files lint-clean (only the pre-existing
+`pStats` useMemo-dep warning in `CorporateClient`). ⚠ **Run migration 004** before using the menu.
+Not run against live Supabase.
+
+---
+
+# Corporate module rebuild — Phase 1: pipeline engine & activity log (corporate only)
+
+First slice of the "world-class corporate booking" spec. Decomposed into 5 phases; this is the
+backbone the rest reads from. **Corporate bookings only** — all hooks guard `booking_type`.
+
+## Stage machine
+Added the two missing stages so the model matches the pipeline: `…advance_paid → **confirmed** →
+**checked_in** → completed`. Updated `CorporateStage` (`types/booking.ts`), `CORPORATE_STAGES`
+labels/colors/step + order, and a `corporateStageStep()` helper (`constants/corporate.ts`).
+`getEffectiveStatus` now counts `confirmed/checked_in/completed` as room-consuming.
+
+## Automation (forward-only, corporate-only)
+`src/lib/server/corporateEngine.ts` (new):
+- **Verified advance → Confirmed.** When a payment is verified (or FO auto-verified), if cumulative
+  **verified** ≥ the PI's `advanceRequired` (fallback: any verified payment when no PI), the booking
+  auto-moves to **Confirmed** and sets booking `status='confirmed'` → consumes calendar inventory.
+- **Final bill fully settled → Completed.**
+- Forward-only by step number; never regresses; never downgrades an already checked-in stay.
+Hooked into `actions/payments.ts` (`verifyPayment` + FO auto-verify path in `addPayment`).
+
+## Manual transitions + admin override
+`actions/corporate.ts`: `checkInCorporate` (Confirmed→Checked-In, FO/Sales/Admin), `completeCorporate`
+(→Completed), and **admin-only** `setCorporateStage` override. Row buttons: **CHECK-IN** (confirmed)
+and **COMPLETE** (checked-in); GEN PI now hides once a PI exists.
+
+## Append-only activity log
+`supabase/migrations/005_corporate_activity.sql` (**run manually**) — `corporate_activity` table,
+permissive RW + RESTRICTIVE no-UPDATE/no-DELETE (never edited/deleted). `logCorporateActivity()`
+wired into every corporate action (inquiry created, cost sheet updated, quote sent/accepted, PI
+generated, payment verified, confirmed, checked-in, completed, admin override). New
+`getCorporateActivity` action + **CorporateActivityModal** (timeline, newest-first, dd/mm/yyyy HH:mm,
+color-coded; admin stage-override built in) opened from a **History** button per row.
+
+**Out of scope (next phases):** detail page, Kanban, KPI cards, smart alerts, document history, Tax
+Invoice.
+
+**Verification:** `npx tsc --noEmit` clean (exit 0); new files lint-clean (only the pre-existing
+`pStats` warning). ⚠ **Run migration 005** for activity logging. Not run against live Supabase.
+
+---
+
+# Corporate module rebuild — Phase 2: booking detail page
+
+A full CRM-style detail page at **`/corporate/[id]`** (server `page.tsx` → `CorporateDetailClient.tsx`),
+reached by clicking a company name in the list. No new DB — reads the Phase 1 engine + activity log.
+
+- **Header** — company, confirmation #, PI #, stage badge, Edit.
+- **Horizontal stage progress bar** — all 9 stages, current highlighted (amber ring), completed green,
+  future grey; horizontally scrollable on mobile.
+- **Two-column responsive layout** — main cards + a **sticky right rail** (financial summary +
+  next-action panel) on desktop, stacking on mobile/tablet.
+- **Cards:** Company Information · Stay Information (occupancy breakdown, rooms) · Cost Sheet (summary +
+  Build/Edit + PDF) · Documents (Cost Sheet/Quotation, Proforma Invoice view+PDF, Tax Invoice marked
+  *coming soon*, payment receipts list) · **Payment Timeline** (PI generated + each payment
+  received/verified, from real data) · **Activity Log** (loaded via `getCorporateActivity`).
+- **Sticky Financial Summary** — Total Quote Value, Taxes (Included), Advance Required, Advance
+  Received, (Unverified), Outstanding — color-coded green/amber/red.
+- **Sticky Next-Action panel** — one stage-aware recommended action (Create Cost Sheet → Send Quote →
+  Mark Accepted → Generate PI → Record Advance → Check-In → Complete), gated by role; reuses the
+  Phase 1 actions and existing modals (cost sheet, payment, edit, PI preview).
+
+Reservation execs can now open a booking and read company / dates / revenue / payment / stage / next
+action at a glance — the Phase 2 success criteria.
+
+**Out of scope (next phases):** list Kanban + richer filters (3), dashboard KPIs + smart alerts (4),
+document history + Tax Invoice generation (5).
+
+**Verification:** `npx tsc --noEmit` clean (exit 0); new files lint-clean. No new migration. Not run
+against live Supabase.
+
+---
+
+# Corporate module rebuild — Phase 3: list, filters & Kanban
+
+Upgraded the corporate list (`CorporateClient.tsx`) into a CRM-grade pipeline view. No new DB.
+
+- **Table/Kanban toggle.**
+- **Richer table columns:** Company, Contact, Arrival, Departure, Rooms, Value, **Advance status**
+  pill (Paid/Partial/Unverified/Pending, color-coded), color-coded **Stage**, Owner, **Last Activity**
+  (newest `corporate_activity` per booking — server query `getLatestActivityByBooking`, with the
+  message as a tooltip), and **Next Action** (stage-derived hint). Company name links to the detail page.
+- **Filters:** search, **Stage**, **Company** (dropdown), **Arrival date range** (dd/mm/yyyy pickers),
+  **Min revenue** (₹), a Clear-filters reset, and a live "{n} of {total}" count.
+- **Kanban view:** 8 columns (Inquiry → Draft → Quote Sent → Accepted → PI/Advance → Confirmed →
+  Checked-In → Completed); cards show company, confirmation #, arrival, rooms, value + advance pill,
+  per-column count and total value; click a card to open the detail page. Read-only by design — stages
+  move only via workflow + automation + admin override (per the business rule), so no drag-drop.
+- Server: new `getLatestActivityByBooking` query; `page.tsx` passes `lastActivity` to the client.
+
+**Out of scope (next phases):** dashboard KPI cards + smart alerts (4), document history + Tax Invoice
+generation (5).
+
+**Verification:** `npx tsc --noEmit` clean (exit 0); only the pre-existing `pStats` useMemo-dep warning.
+No new migration. Not run against live Supabase.

@@ -1,33 +1,31 @@
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
-import { getBookings } from '@/lib/queries/bookings';
+import { getBookingById } from '@/lib/queries/bookings';
 import { getPayments } from '@/lib/queries/payments';
-import { getLatestActivityByBooking } from '@/lib/queries/corporate';
 import type { UserRole } from '@/lib/types/profile';
-import { CorporateClient } from './CorporateClient';
+import { CorporateDetailClient } from './CorporateDetailClient';
 
-export default async function CorporatePage() {
+export default async function CorporateDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');
   const { data: profile } = await supabase.from('profiles').select('name, role').eq('id', user.id).single();
   if (!profile) redirect('/login');
 
-  const [bookings, payments, usersData, lastActivity] = await Promise.all([
-    getBookings(),
+  const [booking, payments, usersData] = await Promise.all([
+    getBookingById(id),
     getPayments(),
     supabase.from('profiles').select('name, role').in('role', ['Admin', 'Sales', 'Accounts', 'Front Office']),
-    getLatestActivityByBooking(),
   ]);
 
-  const corporateBookings = bookings.filter(b => b.bookingType === 'corporate');
+  if (!booking || booking.bookingType !== 'corporate') redirect('/corporate');
 
   return (
-    <CorporateClient
-      initialBookings={corporateBookings}
-      initialPayments={payments}
+    <CorporateDetailClient
+      booking={booking}
+      payments={payments.filter(p => p.bookingId === booking.id)}
       users={(usersData.data ?? []) as Array<{ name: string; role: string }>}
-      lastActivity={lastActivity}
       currentUser={{ id: user.id, name: profile.name as string, role: profile.role as UserRole }}
     />
   );

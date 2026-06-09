@@ -277,6 +277,12 @@ export async function deleteBooking(bookingId: string): Promise<ActionResult> {
   if (!actor) return err('Not authenticated');
   if (actor.role !== 'Admin') return err('Only Admin can delete bookings');
 
+  // Corporate bookings are a permanent record — never deletable (business rule).
+  const { data: existing } = await supabase.from('bookings').select('booking_type').eq('id', bookingId).single();
+  if (existing?.['booking_type'] === 'corporate') {
+    return err('Corporate bookings cannot be deleted.');
+  }
+
   const { error } = await supabase.from('bookings').delete().eq('id', bookingId);
   if (error) {
     console.error('[deleteBooking]', error);

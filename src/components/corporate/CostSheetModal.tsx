@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo, useTransition } from 'react';
-import { X, Plus, Trash2 } from 'lucide-react';
+import { X, Plus, Trash2, Printer } from 'lucide-react';
 import { toast } from 'sonner';
 import { updateCostSheet, sendCostSheet, markCostSheetAccepted } from '@/lib/actions/corporate';
 import { LINE_ITEM_CATALOGUE } from '@/lib/constants/catalogue';
@@ -226,6 +226,13 @@ export function CostSheetModal({ booking, currentUser, onClose }: Props) {
             </div>
             <div className="flex gap-2">
               <button onClick={onClose} className="px-4 py-2 text-sm border border-stone-300 hover:bg-stone-100 tracking-wider">CLOSE</button>
+              <button
+                onClick={() => { const w = window.open(`/api/print/cost-sheet?bookingId=${booking.id}`, '_blank'); w?.addEventListener('load', () => setTimeout(() => w.print(), 300)); }}
+                className="px-4 py-2 text-sm border border-emerald-700 text-emerald-800 hover:bg-emerald-50 tracking-wider flex items-center gap-1.5"
+                title="Open the saved cost sheet as a printable PDF"
+              >
+                <Printer size={13} /> PDF
+              </button>
               <button onClick={handleSaveDraft} disabled={isPending} className="px-5 py-2 text-sm bg-stone-700 hover:bg-stone-800 text-white tracking-wider disabled:opacity-50">SAVE DRAFT</button>
               {(stage === 'inquiry' || stage === 'cost_sheet_draft') && <button onClick={handleSaveAndSend} disabled={isPending} className="px-5 py-2 text-sm bg-blue-700 hover:bg-blue-800 text-white tracking-wider disabled:opacity-50">SAVE & MARK SENT</button>}
               {stage === 'cost_sheet_sent' && <button onClick={handleSaveAndAccept} disabled={isPending} className="px-5 py-2 text-sm bg-purple-700 hover:bg-purple-800 text-white tracking-wider disabled:opacity-50">SAVE & MARK ACCEPTED</button>}
