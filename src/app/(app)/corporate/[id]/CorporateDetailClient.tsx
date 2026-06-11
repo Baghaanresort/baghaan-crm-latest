@@ -109,7 +109,7 @@ export function CorporateDetailClient({ booking, payments, users, currentUser }:
     }
   }, [stage, booking.id, ps, canEdit, canGenPI, canPay]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const balanceTone = ps.balance <= 0 ? 'text-emerald-700' : ps.advanceShortfall > 0 ? 'text-red-600' : 'text-amber-600';
+  const balanceTone = ps.billAmount > 0 && ps.balance <= 0 ? 'text-emerald-700' : ps.advanceShortfall > 0 ? 'text-red-600' : 'text-amber-600';
   const curStep = corporateStageStep(stage);
   const canMarkLost = (isSales || isAdmin) && !lost && corporateStageStep(stage) < corporateStageStep('confirmed');
 

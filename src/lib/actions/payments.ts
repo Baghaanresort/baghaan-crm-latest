@@ -25,6 +25,47 @@ async function onPaymentVerified(
   await runCorporateAutomation(supabase, bookingId, actor);
 }
 
+// Keep an enquiry's stage in lock-step with its held booking's payments.
+// Idempotent: recomputes purely from current payment rows, so add/verify/unverify/
+// delete all converge correctly. No-op for bookings with no source enquiry.
+async function syncEnquiryStageFromPayment(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  bookingId: string,
+): Promise<void> {
+  const { data: b } = await supabase
+    .from('bookings')
+    .select('source_enquiry_id, status')
+    .eq('id', bookingId)
+    .single();
+
+  const enquiryId = b?.['source_enquiry_id'] as string | null;
+  if (!enquiryId) return;
+  // Once the booking is confirmed (Booked), payment edits don't move the enquiry.
+  if (b?.['status'] !== 'hold') return;
+
+  const { data: pays } = await supabase
+    .from('payments')
+    .select('verified')
+    .eq('booking_id', bookingId);
+
+  // The booking is a pre-arrival hold linked to an enquiry, so EVERY payment on it
+  // is the advance — regardless of the PaymentModal's date-derived `type` (which can
+  // default to 'balance'/'btc_receipt' for same-day or past arrivals). Don't filter
+  // by type, or a valid advance is invisible and the enquiry stays at rooms_blocked.
+  const relevant = pays ?? [];
+  const hasVerified = relevant.some(p => p['verified'] === true);
+  const hasAny = relevant.length > 0;
+
+  const stage = hasVerified ? 'advance_confirmed' : hasAny ? 'advance_pending' : 'rooms_blocked';
+
+  await supabase
+    .from('enquiries')
+    .update({ status: stage, updated_at: new Date().toISOString() })
+    .eq('id', enquiryId)
+    .eq('held_booking_id', bookingId); // guard: only the live hold
+  revalidatePath('/enquiries');
+}
+
 async function getAuthedUser(supabase: Awaited<ReturnType<typeof createClient>>) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return null;
@@ -94,6 +135,7 @@ export async function addPayment(
     await onPaymentVerified(supabase, payment.bookingId, payment.amount, actor);
   }
 
+  await syncEnquiryStageFromPayment(supabase, payment.bookingId);
   revalidatePaymentPaths();
   return ok({ id });
 }
@@ -128,6 +170,7 @@ export async function verifyPayment(paymentId: string): Promise<ActionResult> {
 
   if (pay?.['booking_id']) {
     await onPaymentVerified(supabase, pay['booking_id'] as string, Number(pay['amount'] ?? 0), actor);
+    await syncEnquiryStageFromPayment(supabase, pay['booking_id'] as string);
   }
 
   revalidatePaymentPaths();
@@ -146,6 +189,8 @@ export async function unverifyPayment(paymentId: string): Promise<ActionResult> 
     return err('Only Accounts and Admin can un-verify payments');
   }
 
+  const { data: pay } = await supabase.from('payments').select('booking_id').eq('id', paymentId).single();
+
   const { error } = await supabase
     .from('payments')
     .update({ verified: false, verified_at: null, verified_by: null })
@@ -156,6 +201,7 @@ export async function unverifyPayment(paymentId: string): Promise<ActionResult> 
     return err('Failed to un-verify payment.');
   }
 
+  if (pay?.['booking_id']) await syncEnquiryStageFromPayment(supabase, pay['booking_id'] as string);
   revalidatePaymentPaths();
   return ok(undefined);
 }
@@ -172,12 +218,15 @@ export async function deletePayment(paymentId: string): Promise<ActionResult> {
     return err('Only Accounts and Admin can delete payments');
   }
 
+  const { data: pay } = await supabase.from('payments').select('booking_id').eq('id', paymentId).single();
+
   const { error } = await supabase.from('payments').delete().eq('id', paymentId);
   if (error) {
     console.error('[deletePayment]', error);
     return err('Failed to delete payment.');
   }
 
+  if (pay?.['booking_id']) await syncEnquiryStageFromPayment(supabase, pay['booking_id'] as string);
   revalidatePaymentPaths();
   return ok(undefined);
 }

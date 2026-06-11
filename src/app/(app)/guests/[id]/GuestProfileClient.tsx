@@ -212,8 +212,8 @@ export function GuestProfileClient({ guest, bookings, payments, currentUser, tod
                       <div className="text-right">
                         <div className="font-medium text-sm">₹{b.totalAmount.toLocaleString('en-IN')}</div>
                         {paid > 0 && (
-                          <div className={`text-xs ${balance <= 0 ? 'text-emerald-600' : 'text-amber-600'}`}>
-                            {balance <= 0 ? 'Paid ✓' : `₹${balance.toLocaleString('en-IN')} due`}
+                          <div className={`text-xs ${b.totalAmount > 0 && balance <= 0 ? 'text-emerald-600' : 'text-amber-600'}`}>
+                            {b.totalAmount > 0 && balance <= 0 ? 'Paid ✓' : `₹${balance.toLocaleString('en-IN')} due`}
                           </div>
                         )}
                         <div className="text-xs text-stone-400 mt-0.5">{b.createdBy}</div>

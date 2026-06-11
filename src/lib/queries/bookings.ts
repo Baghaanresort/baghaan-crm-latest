@@ -4,9 +4,13 @@ import type { Booking } from '@/lib/types/booking';
 
 export async function getBookings(): Promise<Booking[]> {
   const supabase = await createClient();
+  // Enquiry-driven holds live in the Enquiry tab until they're booked. Keep rows
+  // where status != 'hold' OR there's no linked enquiry. (At BOOK the hold becomes
+  // 'confirmed', so it surfaces here naturally.)
   const { data } = await supabase
     .from('bookings')
     .select('*')
+    .or('status.neq.hold,source_enquiry_id.is.null')
     .order('created_at', { ascending: false });
   return (data ?? []).map(dbToBooking);
 }
