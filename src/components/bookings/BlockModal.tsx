@@ -4,6 +4,7 @@ import { useState, useTransition, useMemo, useEffect } from 'react';
 import { X } from 'lucide-react';
 import { toast } from 'sonner';
 import { createBlockedRoom, updateBooking } from '@/lib/actions/bookings';
+import { blockEnquiryRooms } from '@/lib/actions/enquiries';
 import { ROOM_INVENTORY } from '@/lib/constants/rooms';
 import { datesInRange, isoDate, daysBetween, todayISO, addDays } from '@/lib/utils/date';
 import { DateInput } from '@/components/ui/DateInput';
@@ -14,7 +15,9 @@ interface Props {
   currentUser: { name: string; role: string };
   existingBookings: Booking[];
   booking?: Booking;
+  enquiry?: { id: string; name: string; phone: string };
   onConvert?: (hold: Booking) => void;
+  onBlocked?: () => void;
   onClose: () => void;
 }
 
@@ -25,7 +28,7 @@ function toLocalInput(iso: string | null): string {
   return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
 }
 
-export function BlockModal({ currentUser, existingBookings, booking, onConvert, onClose }: Props) {
+export function BlockModal({ currentUser, existingBookings, booking, enquiry, onConvert, onBlocked, onClose }: Props) {
   const today = todayISO();
   const isEdit = !!booking;
   const [isPending, startTransition] = useTransition();
@@ -33,9 +36,12 @@ export function BlockModal({ currentUser, existingBookings, booking, onConvert, 
   const defaultExpiry = new Date(Date.now() + 48 * 3600000);
   const localExpiry = new Date(defaultExpiry.getTime() - defaultExpiry.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
 
+  const seedName = booking?.guestName ?? enquiry?.name ?? '';
+  const seedPhone = booking?.contactNumber ?? enquiry?.phone ?? '';
+
   const [form, setForm] = useState({
-    guestName: booking?.guestName ?? '',
-    contactNumber: booking?.contactNumber ?? '',
+    guestName: seedName,
+    contactNumber: seedPhone,
     arrival: booking?.arrival ?? today,
     departure: booking?.departure ?? isoDate(new Date(Date.now() + 86400000)),
     nights: booking?.nights ?? 1,
@@ -110,6 +116,15 @@ export function BlockModal({ currentUser, existingBookings, booking, onConvert, 
         });
         if (!result.success) { toast.error(result.error); return; }
         toast.success('Hold updated');
+      } else if (enquiry) {
+        const result = await blockEnquiryRooms(enquiry.id, {
+          arrival: form.arrival, departure: form.departure, nights: form.nights,
+          adults: form.adults, children: form.children, rooms: form.rooms,
+          quotedAmount: quoted, notes: form.notes, holdExpiresAt: form.holdExpiresAt || null,
+        });
+        if (!result.success) { toast.error(result.error); return; }
+        toast.success(`Rooms blocked: ${result.data.confirmationNumber}`);
+        onBlocked?.();
       } else {
         const result = await createBlockedRoom({ ...form, quotedAmount: quoted, createdBy: currentUser.name });
         if (!result.success) { toast.error(result.error); return; }

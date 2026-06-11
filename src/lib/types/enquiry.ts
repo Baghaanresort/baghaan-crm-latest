@@ -1,4 +1,11 @@
-export type EnquiryStatus = 'new' | 'in_progress' | 'booked' | 'lost';
+export type EnquiryStatus =
+  | 'new'
+  | 'in_progress'
+  | 'rooms_blocked'
+  | 'advance_pending'
+  | 'advance_confirmed'
+  | 'booked'
+  | 'lost';
 export type ActivityType = 'call' | 'whatsapp' | 'email' | 'note' | 'status_change' | 'booking_created';
 
 export interface Enquiry {
@@ -21,6 +28,7 @@ export interface Enquiry {
   createdAt: string;
   updatedAt: string;
   linkedBookingId: string | null;
+  heldBookingId: string | null;
   lostReason: string;
   lostAt: string | null;
 }

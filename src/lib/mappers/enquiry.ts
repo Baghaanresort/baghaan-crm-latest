@@ -22,6 +22,7 @@ export function dbToEnquiry(row: Record<string, any>): Enquiry {
     createdAt: row['created_at'] as string,
     updatedAt: row['updated_at'] as string,
     linkedBookingId: (row['linked_booking_id'] as string | null) ?? null,
+    heldBookingId: (row['held_booking_id'] as string | null) ?? null,
     lostReason: (row['lost_reason'] as string | null) ?? '',
     lostAt: (row['lost_at'] as string | null) ?? null,
   };
@@ -48,6 +49,7 @@ export function enquiryToDb(e: Enquiry): Record<string, unknown> {
     created_at: e.createdAt,
     updated_at: e.updatedAt,
     linked_booking_id: e.linkedBookingId || null,
+    held_booking_id: e.heldBookingId || null,
     lost_reason: e.lostReason || '',
     lost_at: e.lostAt || null,
   };

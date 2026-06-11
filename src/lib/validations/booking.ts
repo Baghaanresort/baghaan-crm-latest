@@ -62,6 +62,7 @@ export const BlockRoomSchema = z
     notes: z.string().optional().default(''),
     createdBy: z.string().min(1),
     holdExpiresAt: z.string().nullable().optional(),
+    sourceEnquiryId: z.string().nullable().optional(),
   })
   .refine((data) => data.departure > data.arrival, {
     message: 'Departure must be after arrival',

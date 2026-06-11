@@ -2,9 +2,9 @@
 
 import { useState, useMemo, useTransition, useEffect } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { Plus, Calendar, Search, Trash2, Edit2, FileText, Eye, Download, MessageCircle } from 'lucide-react';
+import { Plus, Calendar, Search, Ban, Edit2, FileText, Eye, Download, MessageCircle } from 'lucide-react';
 import { toast } from 'sonner';
-import { deleteBooking } from '@/lib/actions/bookings';
+import { cancelBooking } from '@/lib/actions/bookings';
 import { getEffectiveStatus, getBookingPaymentStatus } from '@/lib/utils/booking';
 import { fmtDate, todayISO } from '@/lib/utils/date';
 import { buildWaLink, WA_TEMPLATES } from '@/lib/constants/whatsapp';
@@ -32,6 +32,7 @@ const STATUS_TABS = [
   { key: 'upcoming', label: 'Confirmed', dot: 'bg-blue-500' },
   { key: 'inhouse', label: 'In House', dot: 'bg-emerald-600' },
   { key: 'past', label: 'Checked Out', dot: 'bg-stone-400' },
+  { key: 'cancelled', label: 'Cancelled', dot: 'bg-stone-400' },
 ] as const;
 
 export function BookingsClient({ initialBookings, initialPayments, users, currentUser }: Props) {
@@ -88,6 +89,7 @@ export function BookingsClient({ initialBookings, initialPayments, users, curren
   const kpis = useMemo(() => {
     let arrivingToday = 0, inHouseNow = 0, departingToday = 0, onHold = 0;
     bookings.forEach(b => {
+      if (b.status === 'cancelled') return; // voided — excluded from active counts
       const eff = getEffectiveStatus(b, payments);
       if (b.arrival === today) arrivingToday++;
       if (b.arrival <= today && b.departure > today && eff === 'confirmed') inHouseNow++;
@@ -99,8 +101,10 @@ export function BookingsClient({ initialBookings, initialPayments, users, curren
 
   // Counts for status pill tabs
   const statusCounts = useMemo(() => {
-    const c: Record<string, number> = { all: bookings.length, hold: 0, pending_verification: 0, upcoming: 0, inhouse: 0, past: 0 };
+    const c: Record<string, number> = { all: 0, hold: 0, pending_verification: 0, upcoming: 0, inhouse: 0, past: 0, cancelled: 0 };
     bookings.forEach(b => {
+      if (b.status === 'cancelled') { c['cancelled']!++; return; } // shown only under the Cancelled tab
+      c['all']!++;
       const eff = getEffectiveStatus(b, payments);
       if (eff === 'hold') c['hold']!++;
       if (eff === 'pending_verification') c['pending_verification']!++;
@@ -115,6 +119,9 @@ export function BookingsClient({ initialBookings, initialPayments, users, curren
     return bookings.filter(b => {
       const eff = effStatus(b);
       if (filterAgent !== 'all' && b.createdBy !== filterAgent) return false;
+      // Cancelled bookings are kept as a record but live only under the Cancelled tab.
+      if (filterStatus === 'cancelled') { if (b.status !== 'cancelled') return false; }
+      else if (b.status === 'cancelled') return false;
       if (filterStatus === 'hold' && eff !== 'hold') return false;
       if (filterStatus === 'pending_verification' && eff !== 'pending_verification') return false;
       if (filterStatus === 'upcoming' && (b.arrival <= today || eff !== 'confirmed')) return false;
@@ -124,7 +131,7 @@ export function BookingsClient({ initialBookings, initialPayments, users, curren
         const ps = pStats(b);
         if (filterPayment === 'unpaid' && ps.totalPaid > 0) return false;
         if (filterPayment === 'partial' && (ps.totalPaid === 0 || ps.balance <= 0)) return false;
-        if (filterPayment === 'paid' && ps.balance > 0) return false;
+        if (filterPayment === 'paid' && !(ps.billAmount > 0 && ps.balance <= 0)) return false;
         if (filterPayment === 'overpaid' && ps.balance >= 0) return false;
       }
       if (search) {
@@ -135,12 +142,12 @@ export function BookingsClient({ initialBookings, initialPayments, users, curren
     }).sort((a, b) => b.arrival.localeCompare(a.arrival));
   }, [bookings, search, filterAgent, filterStatus, filterPayment, today]);
 
-  const handleDelete = (id: string) => {
-    if (!confirm('Delete this reservation? This cannot be undone.')) return;
+  const handleCancel = (id: string) => {
+    if (!confirm('Cancel this reservation? The rooms will be released, but the booking record is kept for the log.')) return;
     startTransition(async () => {
-      const result = await deleteBooking(id);
+      const result = await cancelBooking(id);
       if (!result.success) { toast.error(result.error); return; }
-      toast.success('Reservation deleted');
+      toast.success('Reservation cancelled');
     });
   };
 
@@ -264,11 +271,12 @@ export function BookingsClient({ initialBookings, initialPayments, users, curren
                 else if (eff === 'pending_verification') { statusColor = 'bg-purple-100 text-purple-800'; statusLabel = 'Pending Verification'; statusDot = 'bg-purple-500'; }
                 else if (timeStatus === 'inhouse') { statusColor = 'bg-emerald-100 text-emerald-800'; statusLabel = 'In House'; statusDot = 'bg-emerald-600'; }
                 else if (timeStatus === 'upcoming') { statusColor = 'bg-blue-100 text-blue-800'; statusLabel = 'Confirmed'; statusDot = 'bg-blue-500'; }
+                if (b.status === 'cancelled') { statusColor = 'bg-stone-200 text-stone-500'; statusLabel = 'Cancelled'; statusDot = 'bg-stone-400'; }
 
                 let payBadgeLabel = 'Unpaid';
                 let payBadgeColor = 'bg-red-100 text-red-700';
                 if (ps.totalUnverified > 0 && ps.totalPaid === 0) { payBadgeLabel = 'Awaiting Verification'; payBadgeColor = 'bg-purple-100 text-purple-700'; }
-                else if (ps.balance <= 0) { payBadgeLabel = 'Settled'; payBadgeColor = 'bg-emerald-100 text-emerald-700'; }
+                else if (ps.billAmount > 0 && ps.balance <= 0) { payBadgeLabel = 'Settled'; payBadgeColor = 'bg-emerald-100 text-emerald-700'; }
                 else if (ps.totalPaid > 0) { payBadgeLabel = 'Partially Paid'; payBadgeColor = 'bg-amber-100 text-amber-700'; }
 
                 const rowHighlight = eff === 'hold' ? 'bg-amber-50/30' : eff === 'pending_verification' ? 'bg-purple-50/30' : '';
@@ -309,7 +317,7 @@ export function BookingsClient({ initialBookings, initialPayments, users, curren
                       </td>
                     )}
                     {!isOp && (
-                      <td className={`p-3 text-right text-xs font-medium ${ps.balance <= 0 ? 'text-emerald-700' : ps.totalPaid > 0 ? 'text-amber-700' : 'text-red-700'}`}>
+                      <td className={`p-3 text-right text-xs font-medium ${ps.billAmount > 0 && ps.balance <= 0 ? 'text-emerald-700' : ps.totalPaid > 0 ? 'text-amber-700' : 'text-red-700'}`}>
                         ₹{ps.balance.toLocaleString('en-IN')}
                       </td>
                     )}
@@ -341,9 +349,9 @@ export function BookingsClient({ initialBookings, initialPayments, users, curren
                             </button>
                           </>
                         )}
-                        {isAdmin && (
-                          <button onClick={() => handleDelete(b.id)} disabled={isPending} title="Delete reservation" className="p-1.5 hover:bg-red-100 text-red-600 rounded disabled:opacity-50 transition-colors">
-                            <Trash2 size={13} />
+                        {(isAdmin || isSales) && b.status !== 'cancelled' && b.bookingType !== 'corporate' && (
+                          <button onClick={() => handleCancel(b.id)} disabled={isPending} title="Cancel reservation" className="p-1.5 hover:bg-red-100 text-red-600 rounded disabled:opacity-50 transition-colors">
+                            <Ban size={13} />
                           </button>
                         )}
                       </div>

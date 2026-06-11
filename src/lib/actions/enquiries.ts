@@ -8,6 +8,9 @@ import { EnquirySchema, UpdateEnquirySchema } from '@/lib/validations/enquiry';
 import { enquiryToDb, dbToEnquiry } from '@/lib/mappers/enquiry';
 import { bookingToDb } from '@/lib/mappers/booking';
 import { generateConfirmationNumber } from '@/lib/utils/booking';
+import { createBlockedRoom } from '@/lib/actions/bookings';
+import { dispatchVoucher } from '@/lib/actions/dispatch';
+import { EnquiryBlockSchema } from '@/lib/validations/enquiry-block';
 import type { Enquiry } from '@/lib/types/enquiry';
 import type { Booking } from '@/lib/types/booking';
 
@@ -78,6 +81,7 @@ export async function createEnquiry(
     createdAt: now,
     updatedAt: now,
     linkedBookingId: null,
+    heldBookingId: null,
     lostReason: '',
     lostAt: null,
   };
@@ -273,4 +277,186 @@ export async function markEnquiryConverted(
   revalidateEnquiryPaths();
   revalidatePath('/bookings');
   return ok(undefined);
+}
+
+// ---------- blockEnquiryRooms ----------
+
+export async function blockEnquiryRooms(
+  enquiryId: string,
+  input: z.infer<typeof EnquiryBlockSchema>,
+): Promise<ActionResult<{ bookingId: string; confirmationNumber: string }>> {
+  if (!enquiryId) return err('Enquiry ID required');
+  const parsed = EnquiryBlockSchema.safeParse(input);
+  if (!parsed.success) return err(parsed.error.issues[0]?.message ?? 'Validation failed');
+
+  const supabase = await createClient();
+  const actor = await getAuthedUser(supabase);
+  if (!actor) return err('Not authenticated');
+  if (!['Sales', 'Admin'].includes(actor.role)) return err('Only Sales and Admin can block rooms');
+
+  const { data: enq } = await supabase
+    .from('enquiries').select('name, phone, status, held_booking_id').eq('id', enquiryId).single();
+  if (!enq) return err('Enquiry not found');
+  if (enq['held_booking_id']) return err('This enquiry already has blocked rooms.');
+  if (!['new', 'in_progress'].includes(enq['status'] as string)) {
+    return err('Rooms can only be blocked from a New or In Progress lead.');
+  }
+
+  // Reuse the hold-booking creator; it runs checkRoomConflict and stamps the back-link.
+  const blockRes = await createBlockedRoom({
+    guestName: (enq['name'] as string) || 'Enquiry guest',
+    contactNumber: (enq['phone'] as string) || '',
+    arrival: parsed.data.arrival,
+    departure: parsed.data.departure,
+    nights: parsed.data.nights,
+    adults: parsed.data.adults,
+    children: parsed.data.children,
+    rooms: parsed.data.rooms,
+    quotedAmount: parsed.data.quotedAmount ?? 0,
+    notes: parsed.data.notes ?? '',
+    createdBy: actor.name,
+    holdExpiresAt: parsed.data.holdExpiresAt ?? null,
+    sourceEnquiryId: enquiryId,
+  });
+  if (!blockRes.success) return err(blockRes.error);
+
+  const now = new Date().toISOString();
+  const { error } = await supabase.from('enquiries').update({
+    status: 'rooms_blocked',
+    held_booking_id: blockRes.data.id,
+    next_action: `Rooms blocked · ${blockRes.data.confirmationNumber}`,
+    updated_by: actor.name,
+    updated_at: now,
+  }).eq('id', enquiryId);
+  if (error) { console.error('[blockEnquiryRooms]', error); return err('Failed to block rooms.'); }
+
+  await supabase.from('enquiry_activities').insert({
+    id: `ACT-${Date.now()}-b`, enquiry_id: enquiryId, type: 'note',
+    note: `Rooms blocked: ${parsed.data.rooms.length} room(s), ${parsed.data.arrival}→${parsed.data.departure}`,
+    created_by: actor.name, created_at: now,
+  });
+
+  revalidateEnquiryPaths();
+  revalidatePath('/calendar');
+  return ok({ bookingId: blockRes.data.id, confirmationNumber: blockRes.data.confirmationNumber });
+}
+
+// ---------- releaseEnquiryHold ----------
+
+export async function releaseEnquiryHold(enquiryId: string): Promise<ActionResult> {
+  if (!enquiryId) return err('Enquiry ID required');
+  const supabase = await createClient();
+  const actor = await getAuthedUser(supabase);
+  if (!actor) return err('Not authenticated');
+  if (!['Sales', 'Admin'].includes(actor.role)) return err('Only Sales and Admin can release holds');
+
+  const { data: enq } = await supabase
+    .from('enquiries').select('held_booking_id, status').eq('id', enquiryId).single();
+  if (!enq?.['held_booking_id']) return err('No active hold on this enquiry.');
+  if (enq['status'] === 'booked') return err('This enquiry is already booked.');
+
+  const now = new Date().toISOString();
+  // Cancel the hold booking (keeps the record; frees the rooms from conflict checks
+  // because checkRoomConflict ignores cancelled bookings).
+  await supabase.from('bookings').update({ status: 'cancelled' }).eq('id', enq['held_booking_id'] as string);
+  const { error } = await supabase.from('enquiries').update({
+    status: 'in_progress', held_booking_id: null, next_action: 'Hold released',
+    updated_by: actor.name, updated_at: now,
+  }).eq('id', enquiryId);
+  if (error) { console.error('[releaseEnquiryHold]', error); return err('Failed to release hold.'); }
+
+  await supabase.from('enquiry_activities').insert({
+    id: `ACT-${Date.now()}-r`, enquiry_id: enquiryId, type: 'note',
+    note: 'Room hold released', created_by: actor.name, created_at: now,
+  });
+
+  revalidateEnquiryPaths();
+  revalidatePath('/calendar');
+  revalidatePath('/bookings');
+  return ok(undefined);
+}
+
+// ---------- bookEnquiry ----------
+
+export async function bookEnquiry(
+  enquiryId: string,
+): Promise<ActionResult<{ bookingId: string; confirmationNumber: string }>> {
+  if (!enquiryId) return err('Enquiry ID required');
+  const supabase = await createClient();
+  const actor = await getAuthedUser(supabase);
+  if (!actor) return err('Not authenticated');
+  if (!['Sales', 'Admin'].includes(actor.role)) return err('Only Sales and Admin can book');
+
+  const { data: enq } = await supabase
+    .from('enquiries').select('held_booking_id, status').eq('id', enquiryId).single();
+  if (!enq) return err('Enquiry not found');
+  if (enq['status'] !== 'advance_confirmed') {
+    return err('A verified advance payment is required before booking.');
+  }
+  const bookingId = enq['held_booking_id'] as string | null;
+  if (!bookingId) return err('No held booking found for this enquiry.');
+
+  const { data: bk } = await supabase
+    .from('bookings').select('confirmation_number, status').eq('id', bookingId).single();
+  if (!bk) return err('Held booking missing.');
+  if (bk['status'] !== 'hold') return err('Held booking is no longer holdable.');
+
+  const now = new Date().toISOString();
+  // Reuse the held record: hold → confirmed is the moment it enters the Bookings tab.
+  const { error: upBk } = await supabase
+    .from('bookings').update({ status: 'confirmed', hold_expires_at: null }).eq('id', bookingId);
+  if (upBk) { console.error('[bookEnquiry booking]', upBk); return err('Failed to confirm booking.'); }
+
+  const confirmationNumber = bk['confirmation_number'] as string;
+  const { error: upEnq } = await supabase.from('enquiries').update({
+    status: 'booked', linked_booking_id: bookingId, followup_date: null,
+    next_action: `Booking confirmed · ${confirmationNumber}`,
+    updated_by: actor.name, updated_at: now,
+  }).eq('id', enquiryId);
+  if (upEnq) { console.error('[bookEnquiry enquiry]', upEnq); return err('Booking confirmed but linking failed.'); }
+
+  await supabase.from('enquiry_activities').insert({
+    id: `ACT-${Date.now()}-bk`, enquiry_id: enquiryId, type: 'booking_created',
+    note: `Converted to booking ${confirmationNumber}`, created_by: actor.name, created_at: now,
+  });
+
+  // Dispatch seam — SP1 logs intent; SP2 actually sends.
+  await dispatchVoucher(bookingId);
+
+  revalidateEnquiryPaths();
+  revalidatePath('/bookings');
+  revalidatePath('/calendar');
+  revalidatePath('/vouchers');
+  return ok({ bookingId, confirmationNumber });
+}
+
+// ---------- releaseExpiredEnquiryHolds (lazy expiry) ----------
+
+// Release enquiry-linked holds whose expiry has passed. Called (fire-and-forget) from
+// the enquiries page load. Idempotent and cheap: one indexed query + bounded updates.
+export async function releaseExpiredEnquiryHolds(): Promise<void> {
+  const supabase = await createClient();
+  const nowIso = new Date().toISOString();
+
+  const { data: expired } = await supabase
+    .from('bookings')
+    .select('id, source_enquiry_id')
+    .eq('status', 'hold')
+    .not('source_enquiry_id', 'is', null)
+    .not('hold_expires_at', 'is', null)
+    .lt('hold_expires_at', nowIso);
+
+  for (const b of expired ?? []) {
+    const bookingId = b['id'] as string;
+    const enquiryId = b['source_enquiry_id'] as string;
+    await supabase.from('bookings').update({ status: 'cancelled' }).eq('id', bookingId);
+    await supabase.from('enquiries').update({
+      status: 'in_progress', held_booking_id: null,
+      next_action: 'Hold expired — rooms released', updated_at: nowIso,
+    }).eq('id', enquiryId).eq('held_booking_id', bookingId);
+    await supabase.from('enquiry_activities').insert({
+      id: `ACT-${Date.now()}-x-${bookingId.slice(-4)}`, enquiry_id: enquiryId, type: 'note',
+      note: 'Hold expired automatically; rooms released', created_by: 'system', created_at: nowIso,
+    });
+  }
 }

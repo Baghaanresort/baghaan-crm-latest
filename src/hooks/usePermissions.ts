@@ -18,7 +18,7 @@ export function usePermissions() {
   return {
     canCreateBooking: isSales || isFO || isAdmin,
     canEditBooking: isSales || isFO || isAdmin,
-    canDeleteBooking: isAdmin,
+    canCancelBooking: isSales || isAdmin,
     canAddPayment: isSales || isFO || isAdmin,
     canAutoVerify: isFO,
     canVerifyPayment: isAccounts || isAdmin,

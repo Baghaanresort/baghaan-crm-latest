@@ -4,12 +4,16 @@ import { useState, useMemo, useTransition, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Plus, Search, Edit2, Download, MessageCircle, Eye } from 'lucide-react';
 import { toast } from 'sonner';
-import { updateEnquiry, convertEnquiryToBooking } from '@/lib/actions/enquiries';
+import { updateEnquiry, bookEnquiry, releaseEnquiryHold } from '@/lib/actions/enquiries';
 import { ENQUIRY_STATUSES, ENQUIRY_SOURCES, LOST_REASONS } from '@/lib/constants/enquiry';
 import { buildWaLink, WA_TEMPLATES } from '@/lib/constants/whatsapp';
 import { addDays } from '@/lib/utils/date';
 import { fmtDate, todayISO } from '@/lib/utils/date';
+import { BlockModal } from '@/components/bookings/BlockModal';
+import { PaymentModal } from '@/components/payments/PaymentModal';
 import type { Enquiry } from '@/lib/types/enquiry';
+import type { Booking } from '@/lib/types/booking';
+import type { Payment } from '@/lib/types/payment';
 import type { UserRole } from '@/lib/types/profile';
 import dynamic from 'next/dynamic';
 
@@ -18,6 +22,8 @@ const EnquiryViewModal = dynamic(() => import('@/components/enquiries/EnquiryVie
 
 interface Props {
   initialEnquiries: Enquiry[];
+  heldBookings: Booking[];
+  heldPayments: Payment[];
   users: Array<{ name: string; role: string }>;
   currentUser: { id: string; name: string; role: UserRole };
 }
@@ -29,7 +35,7 @@ function leadAge(createdAt: string): string {
   return `${days}d`;
 }
 
-export function EnquiriesClient({ initialEnquiries, users, currentUser }: Props) {
+export function EnquiriesClient({ initialEnquiries, heldBookings, heldPayments, users, currentUser }: Props) {
   const today = todayISO();
   const router = useRouter();
   const [enquiries, setEnquiries] = useState(initialEnquiries);
@@ -43,6 +49,15 @@ export function EnquiriesClient({ initialEnquiries, users, currentUser }: Props)
   const [editEnquiry, setEditEnquiry] = useState<Enquiry | null>(null);
   const [viewEnquiry, setViewEnquiry] = useState<Enquiry | null>(null);
   const [lostDialog, setLostDialog] = useState<{ enquiry: Enquiry; reason: string; otherText: string; renurtureAfter: number | null } | null>(null);
+  const [blockFor, setBlockFor] = useState<Enquiry | null>(null);
+  const [payFor, setPayFor] = useState<Enquiry | null>(null);
+
+  const heldById = useMemo(() => new Map(heldBookings.map(b => [b.id, b])), [heldBookings]);
+  const paysByBooking = useMemo(() => {
+    const m = new Map<string, Payment[]>();
+    for (const p of heldPayments) m.set(p.bookingId, [...(m.get(p.bookingId) ?? []), p]);
+    return m;
+  }, [heldPayments]);
 
   const isSales = currentUser.role === 'Sales';
   const isAdmin = currentUser.role === 'Admin';
@@ -101,12 +116,21 @@ export function EnquiriesClient({ initialEnquiries, users, currentUser }: Props)
     });
   };
 
-  const handleConvert = (e: Enquiry) => {
+  const handleBook = (e: Enquiry) => {
     startTransition(async () => {
-      const result = await convertEnquiryToBooking(e.id);
+      const result = await bookEnquiry(e.id);
       if (!result.success) { toast.error(result.error); return; }
-      toast.success('Opening booking form…');
-      router.push(`/bookings?convert=${e.id}&name=${encodeURIComponent(result.data.prefill.guestName)}&phone=${encodeURIComponent(result.data.prefill.contactNumber)}&email=${encodeURIComponent(result.data.prefill.email)}&remarks=${encodeURIComponent(result.data.prefill.remarks)}`);
+      toast.success(`Booked · ${result.data.confirmationNumber}`);
+      router.refresh();
+    });
+  };
+
+  const handleRelease = (e: Enquiry) => {
+    startTransition(async () => {
+      const result = await releaseEnquiryHold(e.id);
+      if (!result.success) { toast.error(result.error); return; }
+      toast.success('Hold released');
+      router.refresh();
     });
   };
 
@@ -295,12 +319,34 @@ export function EnquiriesClient({ initialEnquiries, users, currentUser }: Props)
                             <button onClick={() => setEditEnquiry(e)} className="p-1.5 hover:bg-stone-100 text-stone-600 rounded" title="Edit lead">
                               <Edit2 size={13} />
                             </button>
-                            {e.status !== 'booked' && e.status !== 'lost' && (
-                              <button onClick={() => handleConvert(e)} disabled={isPending} className="text-xs border border-emerald-600 px-2 py-1 hover:bg-emerald-50 text-emerald-700 disabled:opacity-50 whitespace-nowrap">
-                                Convert →
+                            {(e.status === 'new' || e.status === 'in_progress') && (
+                              <button onClick={() => setBlockFor(e)} disabled={isPending}
+                                className="text-xs border border-amber-500 px-2 py-1 hover:bg-amber-50 text-amber-700 disabled:opacity-50 whitespace-nowrap">
+                                Block Rooms
                               </button>
                             )}
-                            {e.status !== 'lost' && (
+                            {e.status === 'rooms_blocked' && (
+                              <>
+                                <button onClick={() => setPayFor(e)} disabled={isPending}
+                                  className="text-xs border border-purple-500 px-2 py-1 hover:bg-purple-50 text-purple-700 disabled:opacity-50">
+                                  Pay
+                                </button>
+                                <button onClick={() => handleRelease(e)} disabled={isPending}
+                                  className="text-xs border border-stone-300 px-2 py-1 hover:bg-stone-100 text-stone-600 disabled:opacity-50">
+                                  Release
+                                </button>
+                              </>
+                            )}
+                            {e.status === 'advance_pending' && (
+                              <span className="text-xs text-purple-600 italic px-2 py-1">Awaiting Accounts</span>
+                            )}
+                            {e.status === 'advance_confirmed' && (
+                              <button onClick={() => handleBook(e)} disabled={isPending}
+                                className="text-xs border border-emerald-600 px-2 py-1 hover:bg-emerald-50 text-emerald-700 disabled:opacity-50 whitespace-nowrap">
+                                Book →
+                              </button>
+                            )}
+                            {e.status !== 'lost' && e.status !== 'booked' && e.status !== 'advance_pending' && e.status !== 'advance_confirmed' && (
                               <button onClick={() => handleQuickStatus(e, 'lost')} className="text-xs border border-red-200 px-2 py-1 hover:bg-red-50 text-red-600">
                                 Lost
                               </button>
@@ -364,6 +410,24 @@ export function EnquiriesClient({ initialEnquiries, users, currentUser }: Props)
       {viewEnquiry && <EnquiryViewModal enquiry={viewEnquiry} onClose={() => setViewEnquiry(null)} />}
       {showNew && <EnquiryModal users={users} currentUser={currentUser} onClose={() => setShowNew(false)} />}
       {editEnquiry && <EnquiryModal enquiry={editEnquiry} users={users} currentUser={currentUser} onClose={() => setEditEnquiry(null)} />}
+
+      {blockFor && (
+        <BlockModal
+          currentUser={currentUser}
+          existingBookings={heldBookings}
+          enquiry={{ id: blockFor.id, name: blockFor.name, phone: blockFor.phone }}
+          onBlocked={() => { setBlockFor(null); router.refresh(); }}
+          onClose={() => setBlockFor(null)}
+        />
+      )}
+      {payFor && payFor.heldBookingId && heldById.get(payFor.heldBookingId) && (
+        <PaymentModal
+          booking={heldById.get(payFor.heldBookingId)!}
+          payments={paysByBooking.get(payFor.heldBookingId) ?? []}
+          currentUser={currentUser}
+          onClose={() => { setPayFor(null); router.refresh(); }}
+        />
+      )}
     </div>
   );
 }

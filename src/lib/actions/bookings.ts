@@ -179,7 +179,7 @@ export async function createBlockedRoom(
     guestCount: null,
     costSheet: null,
     proformaInvoice: null,
-    sourceEnquiryId: null,
+    sourceEnquiryId: parsed.data.sourceEnquiryId ?? null,
     guestId: null,
   };
 
@@ -267,29 +267,50 @@ export async function updateBooking(
   return ok({ id: bookingId });
 }
 
-// ---------- deleteBooking ----------
+// ---------- cancelBooking ----------
 
-export async function deleteBooking(bookingId: string): Promise<ActionResult> {
+// A made booking is a permanent record — it is never hard-deleted. Cancelling
+// soft-voids it: status → 'cancelled' (which checkRoomConflict ignores, so the
+// rooms are freed) while the row, its payments, and history are all preserved.
+export async function cancelBooking(bookingId: string): Promise<ActionResult> {
   if (!bookingId) return err('Booking ID required');
 
   const supabase = await createClient();
   const actor = await getAuthedUser(supabase);
   if (!actor) return err('Not authenticated');
-  if (actor.role !== 'Admin') return err('Only Admin can delete bookings');
+  if (!['Sales', 'Admin'].includes(actor.role)) return err('Only Sales and Admin can cancel bookings');
 
-  // Corporate bookings are a permanent record — never deletable (business rule).
-  const { data: existing } = await supabase.from('bookings').select('booking_type').eq('id', bookingId).single();
-  if (existing?.['booking_type'] === 'corporate') {
-    return err('Corporate bookings cannot be deleted.');
+  const { data: current } = await supabase
+    .from('bookings').select('status, booking_type').eq('id', bookingId).single();
+  if (!current) return err('Booking not found');
+  if (current['status'] === 'cancelled') return err('This booking is already cancelled.');
+  // Corporate bookings are voided from the Corporate pipeline (mark-as-lost), not here.
+  if (current['booking_type'] === 'corporate') {
+    return err('Cancel corporate bookings from the Corporate tab.');
   }
 
-  const { error } = await supabase.from('bookings').delete().eq('id', bookingId);
+  const now = new Date().toISOString();
+  const { error } = await supabase
+    .from('bookings')
+    .update({ status: 'cancelled', hold_expires_at: null })
+    .eq('id', bookingId);
   if (error) {
-    console.error('[deleteBooking]', error);
-    return err('Failed to delete booking.');
+    console.error('[cancelBooking]', error);
+    return err('Failed to cancel booking.');
   }
+
+  // Journal the void so the record shows who cancelled it and when.
+  await supabase.from('booking_history').insert({
+    id: `BH-${Date.now()}`,
+    booking_id: bookingId,
+    changed_by: actor.name,
+    changed_at: now,
+    changes: { status: { from: current['status'], to: 'cancelled' } },
+    snapshot: { ...current, status: 'cancelled' },
+  }).then(({ error: hErr }) => { if (hErr) console.error('[booking_history]', hErr); });
 
   revalidateAll();
+  revalidatePath('/calendar');
   return ok(undefined);
 }
 
