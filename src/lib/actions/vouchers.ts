@@ -28,7 +28,7 @@ export async function getVoucherHistory(bookingId: string): Promise<ActionResult
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return err('Not authenticated');
   const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
-  if (!profile || !['Sales', 'Admin'].includes(profile.role as string)) {
+  if (!profile || !['Sales', 'Sales Admin', 'Admin'].includes(profile.role as string)) {
     return err('Not authorized');
   }
   return ok(await getBookingHistory(bookingId));
@@ -74,7 +74,7 @@ export async function updateVoucher(
   const { data: profile } = await supabase.from('profiles').select('name, role').eq('id', user.id).single();
   if (!profile) return err('Not authenticated');
   const role = profile.role as string;
-  if (!['Sales', 'Admin'].includes(role)) {
+  if (!['Sales', 'Sales Admin', 'Admin'].includes(role)) {
     return err('Only the Sales team can edit vouchers');
   }
 

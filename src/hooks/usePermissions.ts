@@ -10,7 +10,10 @@ export function usePermissions() {
   if (!role) return null;
 
   const isAdmin = role === 'Admin';
-  const isSales = role === 'Sales';
+  const isSalesAdmin = role === 'Sales Admin';
+  // A Sales Admin can do everything a Sales agent can, plus approvals. Treat the two
+  // together wherever Sales capabilities are granted.
+  const isSales = role === 'Sales' || isSalesAdmin;
   const isFO = role === 'Front Office';
   const isAccounts = role === 'Accounts';
   const isOp = OPERATIONAL_ROLES.includes(role as UserRole);
@@ -29,6 +32,12 @@ export function usePermissions() {
     canDeleteCorporate: isSales || isAdmin,
     canSeeEnquiries: isSales || isAdmin,
     canManageUsers: isAdmin,
+    // Request/approval suite
+    canRequestChange: isSales || isAdmin,          // request cancellation / postponement
+    canApproveRequest: isSalesAdmin || isAdmin,    // approve / reject those requests
+    canInitiateRefund: isSales || isAdmin,         // record a refund after approval
+    canProcessRefund: isAccounts || isAdmin,       // mark a refund "done"
+    canCheckIn: isFO || isAdmin,                   // front-office check-in / check-out
     isReadOnly: isAccounts || isOp,
     isOperational: isOp,
     role,

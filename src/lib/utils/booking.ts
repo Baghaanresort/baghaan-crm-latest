@@ -2,7 +2,8 @@ import type { Booking, BookingPaymentStatus, EffectiveStatus } from '@/lib/types
 import type { Payment } from '@/lib/types/payment';
 
 export function getEffectiveStatus(booking: Booking, payments: Payment[]): EffectiveStatus {
-  const bookingPayments = payments.filter((p) => p.bookingId === booking.id);
+  // Refunds are outgoing money — never count them as "paid" toward a reservation.
+  const bookingPayments = payments.filter((p) => p.bookingId === booking.id && p.type !== 'refund');
   const totalPaid = bookingPayments
     .filter((p) => p.verified)
     .reduce((s, p) => s + p.amount, 0);
@@ -22,7 +23,8 @@ export function getEffectiveStatus(booking: Booking, payments: Payment[]): Effec
     return 'hold';
   }
 
-  if (booking.status === 'confirmed') return 'confirmed';
+  // A checked-in / checked-out guest is unambiguously a real reservation.
+  if (booking.status === 'confirmed' || booking.status === 'checked_in' || booking.status === 'checked_out') return 'confirmed';
   if (totalPaid > 0) return 'confirmed';
   if (totalUnverified > 0) return 'pending_verification';
   return 'hold';
@@ -32,11 +34,16 @@ export function getBookingPaymentStatus(
   booking: Booking,
   payments: Payment[]
 ): BookingPaymentStatus {
-  const bookingPayments = payments.filter((p) => p.bookingId === booking.id);
+  const allForBooking = payments.filter((p) => p.bookingId === booking.id);
+  // Incoming payments drive paid/balance; refunds are tracked separately as outflow.
+  const bookingPayments = allForBooking.filter((p) => p.type !== 'refund');
   const verifiedPayments = bookingPayments.filter((p) => p.verified);
   const totalPaid = verifiedPayments.reduce((s, p) => s + p.amount, 0);
   const totalUnverified = bookingPayments
     .filter((p) => !p.verified)
+    .reduce((s, p) => s + p.amount, 0);
+  const totalRefunded = allForBooking
+    .filter((p) => p.type === 'refund' && p.refundStatus === 'done')
     .reduce((s, p) => s + p.amount, 0);
   const hasFinalBill =
     !!booking.finalBill && Number(booking.finalBill.totalAmount ?? 0) > 0;
@@ -49,6 +56,7 @@ export function getBookingPaymentStatus(
   return {
     totalPaid,
     totalUnverified,
+    totalRefunded,
     billAmount,
     balance,
     hasFinalBill,

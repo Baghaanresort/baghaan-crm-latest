@@ -15,7 +15,7 @@ async function getAuthedUser(supabase: Awaited<ReturnType<typeof createClient>>)
 }
 
 function canManageMenu(role: string): boolean {
-  return role === 'Sales' || role === 'Admin';
+  return role === 'Sales' || role === 'Sales Admin' || role === 'Admin';
 }
 
 export async function createMenuItem(input: MenuItemInput): Promise<ActionResult<{ id: string }>> {

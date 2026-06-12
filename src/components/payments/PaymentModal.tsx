@@ -20,9 +20,14 @@ interface Props {
 export function PaymentModal({ booking, currentUser, payments, onClose }: Props) {
   const today = todayISO();
   const [isPending, startTransition] = useTransition();
+  // An enquiry-linked hold may have been blocked without a quote. The advance is a
+  // slice of the package total, so capture (and require) the total here.
+  const isEnquiryHold = !!booking.sourceEnquiryId && booking.status === 'hold';
+
   const [form, setForm] = useState({
     paymentDate: today,
     amount: '',
+    totalAmount: booking.totalAmount ? String(booking.totalAmount) : '',
     mode: 'UPI',
     reference: '',
     type: booking.departure < today ? 'btc_receipt' : booking.arrival <= today ? 'balance' : 'advance',
@@ -36,7 +41,11 @@ export function PaymentModal({ booking, currentUser, payments, onClose }: Props)
 
   const totalPaid = payments.filter(p => p.verified).reduce((s, p) => s + p.amount, 0);
   const totalUnverified = payments.filter(p => !p.verified).reduce((s, p) => s + p.amount, 0);
-  const billAmount = booking.finalBill?.totalAmount ?? booking.totalAmount;
+  // For an enquiry hold the bill is the live total being typed, so balance / the
+  // 50% & Full shortcuts stay correct as the total is entered.
+  const billAmount = isEnquiryHold
+    ? Number(form.totalAmount || 0)
+    : (booking.finalBill?.totalAmount ?? booking.totalAmount);
   const balance = billAmount - totalPaid;
 
   const handleSubmit = () => {
@@ -44,6 +53,10 @@ export function PaymentModal({ booking, currentUser, payments, onClose }: Props)
     if (amount <= 0) { toast.error('Amount must be greater than 0'); return; }
     if (!form.paymentDate) { toast.error('Payment date is required'); return; }
     if (!form.mode) { toast.error('Mode of payment is required'); return; }
+    const enquiryTotal = isEnquiryHold ? Number(form.totalAmount) : undefined;
+    if (isEnquiryHold && (!form.totalAmount || Number.isNaN(enquiryTotal!) || enquiryTotal! <= 0)) {
+      toast.error('Total package amount is required'); return;
+    }
 
     startTransition(async () => {
       const result = await addPayment({
@@ -54,6 +67,7 @@ export function PaymentModal({ booking, currentUser, payments, onClose }: Props)
         reference: form.reference.trim(),
         type: form.type as 'advance' | 'balance' | 'btc_receipt',
         notes: form.notes.trim(),
+        ...(enquiryTotal !== undefined ? { totalAmount: enquiryTotal } : {}),
       });
 
       if (!result.success) {
@@ -88,6 +102,15 @@ export function PaymentModal({ booking, currentUser, payments, onClose }: Props)
           {totalUnverified > 0 && (
             <div className="bg-purple-50 border border-purple-200 px-3 py-2 text-xs text-purple-800">
               ₹{totalUnverified.toLocaleString('en-IN')} pending verification — not counted in balance above
+            </div>
+          )}
+
+          {/* Enquiry holds may have been blocked without a quote — capture the package total here. */}
+          {isEnquiryHold && (
+            <div className="bg-amber-50 border-l-4 border-amber-500 p-3">
+              <label className="text-xs text-stone-700 uppercase tracking-wider block mb-1 font-medium">Total Package Amount (₹) *</label>
+              <input type="number" min="0" value={form.totalAmount} onChange={e => update('totalAmount', e.target.value)} placeholder="Enter the full package amount" className="w-full px-3 py-2 border border-stone-300 text-sm outline-none focus:border-amber-600 bg-white" />
+              <p className="text-xs text-stone-500 italic mt-1.5">Required to record an advance against a blocked hold. The advance below is part of this total.</p>
             </div>
           )}
 

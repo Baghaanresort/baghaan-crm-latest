@@ -37,6 +37,10 @@ export const PaymentSchema = z.object({
   reference: z.string().optional().default(''),
   type: z.enum(['advance', 'balance', 'btc_receipt']),
   notes: z.string().optional().default(''),
+  // Package total captured at the PAY step for enquiry-linked holds (which may
+  // have been blocked without a quote). Optional here; required server-side for
+  // those holds. Ignored for bookings that already carry a total.
+  totalAmount: z.number().min(0).optional(),
 });
 
 export const FinalBillSchema = z.object({

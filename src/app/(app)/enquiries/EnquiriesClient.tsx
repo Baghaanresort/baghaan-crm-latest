@@ -38,8 +38,9 @@ function leadAge(createdAt: string): string {
 export function EnquiriesClient({ initialEnquiries, heldBookings, heldPayments, users, currentUser }: Props) {
   const today = todayISO();
   const router = useRouter();
-  const [enquiries, setEnquiries] = useState(initialEnquiries);
-  useEffect(() => { setEnquiries(initialEnquiries); }, [initialEnquiries]);
+  // Read straight from props — the route re-renders with fresh server data after
+  // each mutation (revalidatePath), so no local mirror/effect is needed.
+  const enquiries = initialEnquiries;
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterSource, setFilterSource] = useState('all');

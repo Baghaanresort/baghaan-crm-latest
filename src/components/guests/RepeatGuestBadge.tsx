@@ -14,7 +14,7 @@ export function RepeatGuestBadge({ phone, onGuestFound }: Props) {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (!phone || phone.length < 7) { setGuest(null); return; }
+    if (!phone || phone.length < 7) return;
     const t = setTimeout(async () => {
       setLoading(true);
       const result = await findGuestByPhone(phone);
@@ -29,6 +29,7 @@ export function RepeatGuestBadge({ phone, onGuestFound }: Props) {
     return () => clearTimeout(t);
   }, [phone]);
 
+  if (!phone || phone.length < 7) return null;
   if (loading) return <div className="text-xs text-stone-400 italic py-1">Checking guest profile…</div>;
   if (!guest) return null;
 

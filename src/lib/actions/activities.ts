@@ -30,7 +30,7 @@ export async function addEnquiryActivity(
   const supabase = await createClient();
   const actor = await getAuthedUser(supabase);
   if (!actor) return err('Not authenticated');
-  if (!['Sales', 'Admin'].includes(actor.role)) {
+  if (!['Sales', 'Sales Admin', 'Admin'].includes(actor.role)) {
     return err('Only Sales and Admin can log activities');
   }
 

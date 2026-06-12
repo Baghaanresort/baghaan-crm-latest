@@ -1,5 +1,6 @@
 export const ALL_ROLES = [
   'Sales',
+  'Sales Admin',
   'Front Office',
   'Accounts',
   'Admin',

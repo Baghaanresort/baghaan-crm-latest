@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition, useMemo, useEffect } from 'react';
+import { useState, useTransition, useMemo } from 'react';
 import { X, Zap } from 'lucide-react';
 import { toast } from 'sonner';
 import { createBooking, updateBooking } from '@/lib/actions/bookings';
@@ -29,36 +29,40 @@ export function BookingModal({ booking, users, currentUser, existingBookings, pr
   const today = todayISO();
   const [isPending, startTransition] = useTransition();
 
-  const defaultArrival = isoDate(new Date());
-  const defaultDeparture = isoDate(new Date(Date.now() + 86400000));
-
-  const [form, setForm] = useState({
-    guestName: booking?.guestName ?? prefill?.guestName ?? '',
-    contactNumber: booking?.contactNumber ?? prefill?.contactNumber ?? '',
-    email: booking?.email ?? prefill?.email ?? '',
-    companyName: booking?.companyName ?? '',
-    gstNumber: booking?.gstNumber ?? '',
-    arrival: booking?.arrival ?? defaultArrival,
-    departure: booking?.departure ?? defaultDeparture,
-    nights: booking?.nights ?? 1,
-    adults: booking?.adults ?? 2,
-    children: booking?.children ?? 0,
-    rooms: booking?.rooms ?? ([] as string[]),
-    rateBreakdown: booking?.rateBreakdown ?? '',
-    totalAmount: booking?.totalAmount ?? 0,
-    advancePaid: booking?.advancePaid ?? 0,
-    inclusions: booking?.inclusions ?? '',
-    remarks: booking?.remarks ?? prefill?.remarks ?? '',
-    specialRequests: booking?.specialRequests ?? '',
-    createdBy: booking?.createdBy ?? currentUser.name,
-    status: (convertFromHold ? 'confirmed' : (booking?.status ?? 'confirmed')) as 'confirmed' | 'hold',
-    holdExpiresAt: booking?.holdExpiresAt ?? null,
+  // Lazy initializer keeps the impure date math (new Date) out of the render body.
+  const [form, setForm] = useState(() => {
+    const defaultArrival = isoDate(new Date());
+    const defaultDeparture = isoDate(new Date(Date.now() + 86400000));
+    return {
+      guestName: booking?.guestName ?? prefill?.guestName ?? '',
+      contactNumber: booking?.contactNumber ?? prefill?.contactNumber ?? '',
+      email: booking?.email ?? prefill?.email ?? '',
+      companyName: booking?.companyName ?? '',
+      gstNumber: booking?.gstNumber ?? '',
+      arrival: booking?.arrival ?? defaultArrival,
+      departure: booking?.departure ?? defaultDeparture,
+      adults: booking?.adults ?? 2,
+      children: booking?.children ?? 0,
+      rooms: booking?.rooms ?? ([] as string[]),
+      rateBreakdown: booking?.rateBreakdown ?? '',
+      totalAmount: booking?.totalAmount ?? 0,
+      advancePaid: booking?.advancePaid ?? 0,
+      inclusions: booking?.inclusions ?? '',
+      remarks: booking?.remarks ?? prefill?.remarks ?? '',
+      specialRequests: booking?.specialRequests ?? '',
+      createdBy: booking?.createdBy ?? currentUser.name,
+      status: (convertFromHold ? 'confirmed' : (booking?.status ?? 'confirmed')) as 'confirmed' | 'hold',
+      holdExpiresAt: booking?.holdExpiresAt ?? null,
+    };
   });
 
-  useEffect(() => {
-    const n = daysBetween(form.arrival, form.departure);
-    if (n !== form.nights) setForm(f => ({ ...f, nights: n }));
-  }, [form.arrival, form.departure]);
+  // Nights is derived from the dates — computed in render, not stored/synced.
+  const nights = daysBetween(form.arrival, form.departure);
+
+  // Once a total already exists (editing a saved booking, or a hold being converted)
+  // we treat the rate as user-owned and never auto-overwrite it. New bookings start
+  // in auto mode so the tariff fills itself from the room selection.
+  const [rateTouched, setRateTouched] = useState((booking?.totalAmount ?? 0) > 0);
 
   const update = <K extends keyof typeof form>(k: K, v: typeof form[K]) =>
     setForm(f => ({ ...f, [k]: v }));
@@ -88,14 +92,27 @@ export function BookingModal({ booking, users, currentUser, existingBookings, pr
     }));
   };
 
-  const autoRate = () => {
-    const total = form.rooms.reduce((s, r) => {
-      const cat = getRoomCategory(r);
-      return s + (cat !== 'Other' ? DEFAULT_RATES[cat] : 0);
-    }, 0) * form.nights;
-    update('totalAmount', total);
-    update('rateBreakdown', `${form.rooms.length} room(s) × ${form.nights} night(s) @ avg ₹${form.rooms.length > 0 ? Math.round(total / form.rooms.length / form.nights).toLocaleString('en-IN') : 0}/night`);
+  // Suggested tariff from category rates × nights.
+  const autoTotal = form.rooms.reduce((s, r) => {
+    const cat = getRoomCategory(r);
+    return s + (cat !== 'Other' ? DEFAULT_RATES[cat] : 0);
+  }, 0) * nights;
+  const autoBreakdown = `${form.rooms.length} room(s) × ${nights} night(s) @ avg ₹${form.rooms.length > 0 ? Math.round(autoTotal / form.rooms.length / nights).toLocaleString('en-IN') : 0}/night`;
+
+  // Until the user edits the total by hand, the displayed/saved values follow the
+  // auto calc. Derived in render — no effect, no synced state.
+  const displayTotal = rateTouched ? form.totalAmount : autoTotal;
+  const displayBreakdown = rateTouched ? form.rateBreakdown : autoBreakdown;
+
+  // First manual edit: commit the current auto values into state, then apply the edit
+  // (so switching a custom breakdown doesn't wipe the total, and vice-versa).
+  const enterManual = () => {
+    if (!rateTouched) {
+      setForm(f => ({ ...f, totalAmount: autoTotal, rateBreakdown: autoBreakdown }));
+      setRateTouched(true);
+    }
   };
+  const resetToAuto = () => setRateTouched(false);
 
   const allAgents = useMemo(() => Array.from(new Set([currentUser.name, ...users.map(u => u.name)])).filter(Boolean), [users, currentUser.name]);
 
@@ -103,17 +120,20 @@ export function BookingModal({ booking, users, currentUser, existingBookings, pr
     if (!form.guestName.trim()) { toast.error('Guest name is required'); return; }
     if (!form.contactNumber.trim()) { toast.error('Contact number is required'); return; }
     if (form.rooms.length === 0) { toast.error('Select at least one room'); return; }
-    if (form.nights < 1) { toast.error('Departure must be after arrival'); return; }
+    if (nights < 1) { toast.error('Departure must be after arrival'); return; }
+
+    // nights is derived; totalAmount/rateBreakdown follow the auto calc until overridden.
+    const payload = { ...form, nights, totalAmount: displayTotal, rateBreakdown: displayBreakdown, bookingType: 'regular' as const };
 
     startTransition(async () => {
       if (isEdit) {
         const result = voucherEdit
-          ? await updateVoucher(booking.id, { ...form, bookingType: 'regular' })
-          : await updateBooking(booking.id, { ...form, bookingType: 'regular' });
+          ? await updateVoucher(booking.id, payload)
+          : await updateBooking(booking.id, payload);
         if (!result.success) { toast.error(result.error); return; }
         toast.success(voucherEdit ? 'Voucher updated' : 'Reservation updated');
       } else {
-        const result = await createBooking({ ...form, bookingType: 'regular' });
+        const result = await createBooking(payload);
         if (!result.success) { toast.error(result.error); return; }
         if (sourceEnquiryId) {
           await markEnquiryConverted(sourceEnquiryId, result.data.id, result.data.confirmationNumber);
@@ -167,7 +187,7 @@ export function BookingModal({ booking, users, currentUser, existingBookings, pr
             <div className="grid grid-cols-5 gap-3">
               <Field label="Check-in" type="date" value={form.arrival} min={today} onChange={handleArrivalChange} />
               <Field label="Check-out" type="date" value={form.departure} min={form.arrival} onChange={v => update('departure', v)} />
-              <Field label="Nights" type="number" value={form.nights} readOnly />
+              <Field label="Nights" type="number" value={nights} readOnly />
               <Field label="Adults" type="number" value={form.adults} min={0} onChange={v => update('adults', Number(v))} />
               <Field label="Children" type="number" value={form.children} min={0} onChange={v => update('children', Number(v))} />
             </div>
@@ -204,7 +224,7 @@ export function BookingModal({ booking, users, currentUser, existingBookings, pr
           <Section title="Room Selection">
             <div className="flex items-center justify-between mb-3">
               <p className="text-xs text-stone-500 italic">Greyed rooms are already reserved for these dates</p>
-              <button onClick={autoRate} type="button" className="text-xs border border-stone-300 bg-white px-3 py-1.5 hover:bg-stone-50 flex items-center gap-1.5 transition text-stone-600">
+              <button onClick={resetToAuto} type="button" title="Recalculate the total from the selected rooms" className="text-xs border border-stone-300 bg-white px-3 py-1.5 hover:bg-stone-50 flex items-center gap-1.5 transition text-stone-600">
                 <Zap size={11} /> Auto-rate
               </button>
             </div>
@@ -241,10 +261,21 @@ export function BookingModal({ booking, users, currentUser, existingBookings, pr
           {/* Financials */}
           <Section title="Financials">
             <div className="grid grid-cols-3 gap-4">
-              <Field label="Total Package Amount (₹)" type="number" value={form.totalAmount} onChange={v => update('totalAmount', Number(v))} />
+              <Field label="Total Package Amount (₹)" type="number" value={displayTotal} onChange={v => { enterManual(); update('totalAmount', Number(v)); }} />
               <Field label="Advance Received (₹)" type="number" value={form.advancePaid} onChange={v => update('advancePaid', Number(v))} />
-              <Field label="Rate Breakdown" value={form.rateBreakdown} onChange={v => update('rateBreakdown', v)} />
+              <Field label="Rate Breakdown" value={displayBreakdown} onChange={v => { enterManual(); update('rateBreakdown', v); }} />
             </div>
+            <p className="text-xs italic mt-2 text-stone-500">
+              {rateTouched ? (
+                <>Custom amount entered.{' '}
+                  <button type="button" onClick={resetToAuto} className="text-emerald-700 underline not-italic">
+                    ↻ Reset to auto-rate (₹{autoTotal.toLocaleString('en-IN')})
+                  </button>
+                </>
+              ) : (
+                <>Auto-calculated from selected rooms × nights — edit the amount to override.</>
+              )}
+            </p>
           </Section>
 
           {/* Inclusions & Notes */}

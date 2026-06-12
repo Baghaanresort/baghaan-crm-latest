@@ -1,4 +1,5 @@
-export type PaymentType = 'advance' | 'balance' | 'btc_receipt';
+export type PaymentType = 'advance' | 'balance' | 'btc_receipt' | 'refund';
+export type RefundStatus = 'pending' | 'done';
 
 export interface Payment {
   id: string;
@@ -15,4 +16,7 @@ export interface Payment {
   recordedAt: string;
   recordedBy: string;
   recordedByRole: string;
+  // Only set for `type === 'refund'`: tracks the outgoing-money lifecycle
+  // (pending → done) shown in the Accounts Refund tab. Null for incoming payments.
+  refundStatus: RefundStatus | null;
 }

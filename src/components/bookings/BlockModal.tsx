@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition, useMemo, useEffect } from 'react';
+import { useState, useTransition, useMemo } from 'react';
 import { X } from 'lucide-react';
 import { toast } from 'sonner';
 import { createBlockedRoom, updateBooking } from '@/lib/actions/bookings';
@@ -33,31 +33,30 @@ export function BlockModal({ currentUser, existingBookings, booking, enquiry, on
   const isEdit = !!booking;
   const [isPending, startTransition] = useTransition();
 
-  const defaultExpiry = new Date(Date.now() + 48 * 3600000);
-  const localExpiry = new Date(defaultExpiry.getTime() - defaultExpiry.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
-
   const seedName = booking?.guestName ?? enquiry?.name ?? '';
   const seedPhone = booking?.contactNumber ?? enquiry?.phone ?? '';
 
-  const [form, setForm] = useState({
-    guestName: seedName,
-    contactNumber: seedPhone,
-    arrival: booking?.arrival ?? today,
-    departure: booking?.departure ?? isoDate(new Date(Date.now() + 86400000)),
-    nights: booking?.nights ?? 1,
-    adults: booking?.adults ?? 2,
-    children: booking?.children ?? 0,
-    rooms: booking?.rooms ?? ([] as string[]),
-    // Blank by default (not 0): an empty quote ≠ a quote of zero.
-    quotedAmount: booking?.totalAmount ? String(booking.totalAmount) : '',
-    notes: booking?.remarks ?? '',
-    holdExpiresAt: booking ? toLocalInput(booking.holdExpiresAt) : localExpiry,
+  // Lazy initializer: the impure date math runs once at mount, not on every render.
+  const [form, setForm] = useState(() => {
+    const defaultExpiry = new Date(Date.now() + 48 * 3600000);
+    const localExpiry = new Date(defaultExpiry.getTime() - defaultExpiry.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+    return {
+      guestName: seedName,
+      contactNumber: seedPhone,
+      arrival: booking?.arrival ?? today,
+      departure: booking?.departure ?? isoDate(new Date(Date.now() + 86400000)),
+      adults: booking?.adults ?? 2,
+      children: booking?.children ?? 0,
+      rooms: booking?.rooms ?? ([] as string[]),
+      // Blank by default (not 0): an empty quote ≠ a quote of zero.
+      quotedAmount: booking?.totalAmount ? String(booking.totalAmount) : '',
+      notes: booking?.remarks ?? '',
+      holdExpiresAt: booking ? toLocalInput(booking.holdExpiresAt) : localExpiry,
+    };
   });
 
-  useEffect(() => {
-    const n = daysBetween(form.arrival, form.departure);
-    if (n !== form.nights) setForm(f => ({ ...f, nights: n }));
-  }, [form.arrival, form.departure]);
+  // Nights is derived from the dates — compute in render, no effect/synced state.
+  const nights = daysBetween(form.arrival, form.departure);
 
   const update = <K extends keyof typeof form>(k: K, v: typeof form[K]) =>
     setForm(f => ({ ...f, [k]: v }));
@@ -91,7 +90,7 @@ export function BlockModal({ currentUser, existingBookings, booking, enquiry, on
     if (!form.guestName.trim()) { toast.error('Guest name is required'); return; }
     if (!form.contactNumber.trim()) { toast.error('Contact number is required'); return; }
     if (form.rooms.length === 0) { toast.error('Select at least one room to block'); return; }
-    if (form.nights < 1) { toast.error('Departure must be after arrival'); return; }
+    if (nights < 1) { toast.error('Departure must be after arrival'); return; }
     const quoted = form.quotedAmount.trim() === '' ? 0 : Number(form.quotedAmount);
     if (Number.isNaN(quoted) || quoted < 0) { toast.error('Quoted amount must be a positive number'); return; }
 
@@ -105,7 +104,7 @@ export function BlockModal({ currentUser, existingBookings, booking, enquiry, on
           contactNumber: form.contactNumber,
           arrival: form.arrival,
           departure: form.departure,
-          nights: form.nights,
+          nights: nights,
           adults: form.adults,
           children: form.children,
           rooms: form.rooms,
@@ -118,7 +117,7 @@ export function BlockModal({ currentUser, existingBookings, booking, enquiry, on
         toast.success('Hold updated');
       } else if (enquiry) {
         const result = await blockEnquiryRooms(enquiry.id, {
-          arrival: form.arrival, departure: form.departure, nights: form.nights,
+          arrival: form.arrival, departure: form.departure, nights: nights,
           adults: form.adults, children: form.children, rooms: form.rooms,
           quotedAmount: quoted, notes: form.notes, holdExpiresAt: form.holdExpiresAt || null,
         });
@@ -126,7 +125,7 @@ export function BlockModal({ currentUser, existingBookings, booking, enquiry, on
         toast.success(`Rooms blocked: ${result.data.confirmationNumber}`);
         onBlocked?.();
       } else {
-        const result = await createBlockedRoom({ ...form, quotedAmount: quoted, createdBy: currentUser.name });
+        const result = await createBlockedRoom({ ...form, nights, quotedAmount: quoted, createdBy: currentUser.name });
         if (!result.success) { toast.error(result.error); return; }
         toast.success(`Rooms blocked: ${result.data.confirmationNumber}`);
       }
@@ -153,7 +152,7 @@ export function BlockModal({ currentUser, existingBookings, booking, enquiry, on
           <div className="grid grid-cols-5 gap-3">
             <div><label className="text-xs text-stone-600 uppercase tracking-wider block mb-1">Arrival</label><DateInput value={form.arrival} onChange={v => handleArrivalChange(v)} className="w-full" /></div>
             <div><label className="text-xs text-stone-600 uppercase tracking-wider block mb-1">Departure</label><DateInput value={form.departure} min={form.arrival} onChange={v => update('departure', v)} className="w-full" /></div>
-            <div><label className="text-xs text-stone-600 uppercase tracking-wider block mb-1">Nights</label><input type="number" value={form.nights} readOnly className="w-full px-3 py-2 border border-stone-300 text-sm outline-none bg-stone-100" /></div>
+            <div><label className="text-xs text-stone-600 uppercase tracking-wider block mb-1">Nights</label><input type="number" value={nights} readOnly className="w-full px-3 py-2 border border-stone-300 text-sm outline-none bg-stone-100" /></div>
             <div><label className="text-xs text-stone-600 uppercase tracking-wider block mb-1">Adults</label><NumberInput value={form.adults} min={0} onChange={n => update('adults', n)} className="w-full px-3 py-2 border border-stone-300 text-sm outline-none bg-white" /></div>
             <div><label className="text-xs text-stone-600 uppercase tracking-wider block mb-1">Children</label><NumberInput value={form.children} min={0} onChange={n => update('children', n)} className="w-full px-3 py-2 border border-stone-300 text-sm outline-none bg-white" /></div>
           </div>
@@ -204,7 +203,7 @@ export function BlockModal({ currentUser, existingBookings, booking, enquiry, on
 
           {!isEdit && (
             <div className="bg-emerald-50 border-l-4 border-emerald-700 p-3 text-xs text-stone-700 italic">
-              When the guest pays, open the booking and convert this hold into a confirmed booking. You'll add full details at that point.
+              When the guest pays, open the booking and convert this hold into a confirmed booking. You will add full details at that point.
             </div>
           )}
 

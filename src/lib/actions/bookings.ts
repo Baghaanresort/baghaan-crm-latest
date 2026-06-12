@@ -8,6 +8,7 @@ import { BookingSchema, FinalBillSchema, BlockRoomSchema } from '@/lib/validatio
 import { bookingToDb, dbToBooking } from '@/lib/mappers/booking';
 import { generateConfirmationNumber } from '@/lib/utils/booking';
 import { checkRoomConflict } from '@/lib/utils/conflict';
+import { todayISO } from '@/lib/utils/date';
 import type { Booking, FinalBill } from '@/lib/types/booking';
 
 // ---------- Helpers ----------
@@ -60,7 +61,7 @@ export async function createBooking(
   const supabase = await createClient();
   const actor = await getAuthedUser(supabase);
   if (!actor) return err('Not authenticated');
-  if (!['Sales', 'Front Office', 'Admin'].includes(actor.role)) {
+  if (!['Sales', 'Sales Admin', 'Front Office', 'Admin'].includes(actor.role)) {
     return err('Insufficient permissions');
   }
 
@@ -132,7 +133,7 @@ export async function createBlockedRoom(
   const supabase = await createClient();
   const actor = await getAuthedUser(supabase);
   if (!actor) return err('Not authenticated');
-  if (!['Sales', 'Front Office', 'Admin'].includes(actor.role)) {
+  if (!['Sales', 'Sales Admin', 'Front Office', 'Admin'].includes(actor.role)) {
     return err('Insufficient permissions');
   }
 
@@ -209,7 +210,7 @@ export async function updateBooking(
   const supabase = await createClient();
   const actor = await getAuthedUser(supabase);
   if (!actor) return err('Not authenticated');
-  if (!['Sales', 'Front Office', 'Admin'].includes(actor.role)) {
+  if (!['Sales', 'Sales Admin', 'Front Office', 'Admin'].includes(actor.role)) {
     return err('Insufficient permissions');
   }
 
@@ -278,7 +279,7 @@ export async function cancelBooking(bookingId: string): Promise<ActionResult> {
   const supabase = await createClient();
   const actor = await getAuthedUser(supabase);
   if (!actor) return err('Not authenticated');
-  if (!['Sales', 'Admin'].includes(actor.role)) return err('Only Sales and Admin can cancel bookings');
+  if (!['Sales', 'Sales Admin', 'Admin'].includes(actor.role)) return err('Only Sales and Admin can cancel bookings');
 
   const { data: current } = await supabase
     .from('bookings').select('status, booking_type').eq('id', bookingId).single();
@@ -311,6 +312,68 @@ export async function cancelBooking(bookingId: string): Promise<ActionResult> {
 
   revalidateAll();
   revalidatePath('/calendar');
+  return ok(undefined);
+}
+
+// ---------- checkInBooking ----------
+
+// Front Office marks an arriving guest as physically checked in. This is what
+// drives the In-House list (status-based), not date math. Allowed once the
+// arrival date has come.
+export async function checkInBooking(bookingId: string): Promise<ActionResult> {
+  if (!bookingId) return err('Booking ID required');
+
+  const supabase = await createClient();
+  const actor = await getAuthedUser(supabase);
+  if (!actor) return err('Not authenticated');
+  if (!['Front Office', 'Admin'].includes(actor.role)) return err('Only Front Office and Admin can check guests in');
+
+  const { data: current } = await supabase
+    .from('bookings').select('status, arrival').eq('id', bookingId).single();
+  if (!current) return err('Booking not found');
+  if (current['status'] === 'checked_in') return err('Guest is already checked in.');
+  if (current['status'] === 'checked_out') return err('Guest has already checked out.');
+  if (current['status'] !== 'confirmed') return err('Only a confirmed booking can be checked in.');
+  if ((current['arrival'] as string) > todayISO()) return err('Cannot check in before the arrival date.');
+
+  const now = new Date().toISOString();
+  const { error } = await supabase.from('bookings').update({ status: 'checked_in' }).eq('id', bookingId);
+  if (error) { console.error('[checkInBooking]', error); return err('Failed to check in.'); }
+
+  await supabase.from('booking_history').insert({
+    id: `BH-${Date.now()}`, booking_id: bookingId, changed_by: actor.name, changed_at: now,
+    changes: { status: { from: current['status'], to: 'checked_in' } },
+  }).then(({ error: hErr }) => { if (hErr) console.error('[booking_history]', hErr); });
+
+  revalidateAll();
+  return ok(undefined);
+}
+
+// ---------- checkOutBooking ----------
+
+export async function checkOutBooking(bookingId: string): Promise<ActionResult> {
+  if (!bookingId) return err('Booking ID required');
+
+  const supabase = await createClient();
+  const actor = await getAuthedUser(supabase);
+  if (!actor) return err('Not authenticated');
+  if (!['Front Office', 'Admin'].includes(actor.role)) return err('Only Front Office and Admin can check guests out');
+
+  const { data: current } = await supabase
+    .from('bookings').select('status').eq('id', bookingId).single();
+  if (!current) return err('Booking not found');
+  if (current['status'] !== 'checked_in') return err('Only a checked-in guest can be checked out.');
+
+  const now = new Date().toISOString();
+  const { error } = await supabase.from('bookings').update({ status: 'checked_out' }).eq('id', bookingId);
+  if (error) { console.error('[checkOutBooking]', error); return err('Failed to check out.'); }
+
+  await supabase.from('booking_history').insert({
+    id: `BH-${Date.now()}`, booking_id: bookingId, changed_by: actor.name, changed_at: now,
+    changes: { status: { from: 'checked_in', to: 'checked_out' } },
+  }).then(({ error: hErr }) => { if (hErr) console.error('[booking_history]', hErr); });
+
+  revalidateAll();
   return ok(undefined);
 }
 

@@ -3,6 +3,7 @@ import type { Permissions } from '@/hooks/usePermissions';
 
 export const ROLE_COLORS: Record<UserRole, string> = {
   'Sales': 'bg-amber-600',
+  'Sales Admin': 'bg-amber-800',
   'Front Office': 'bg-blue-700',
   'Accounts': 'bg-purple-700',
   'Admin': 'bg-emerald-900',
@@ -25,6 +26,7 @@ export const DEFAULT_TAB_BY_ROLE: Partial<Record<UserRole, string>> = {
 
 export const ROLE_SUBTITLE: Record<UserRole, string> = {
   'Sales': 'Bookings, holds and your sales pipeline',
+  'Sales Admin': 'Approve cancellations & postponements, plus full sales access',
   'Front Office': "Today's arrivals, in-house guests and check-outs",
   'Accounts': 'Payment verification and receivables',
   'Admin': 'Full operations overview',
@@ -69,6 +71,7 @@ export const ALL_TABS: TabDefinition[] = [
     href: '/corporate',
     allowedFn: (p) =>
       p.role === 'Sales' ||
+      p.role === 'Sales Admin' ||
       p.role === 'Front Office' ||
       p.role === 'Accounts' ||
       p.role === 'Admin',
@@ -79,6 +82,7 @@ export const ALL_TABS: TabDefinition[] = [
     href: '/calendar',
     allowedFn: (p) =>
       p.role === 'Sales' ||
+      p.role === 'Sales Admin' ||
       p.role === 'Front Office' ||
       p.role === 'Admin' ||
       p.isOperational,
@@ -106,12 +110,12 @@ export const ALL_TABS: TabDefinition[] = [
     key: 'guests',
     label: 'Guests',
     href: '/guests',
-    allowedFn: (p) => p.role === 'Sales' || p.role === 'Front Office' || p.role === 'Admin',
+    allowedFn: (p) => p.role === 'Sales' || p.role === 'Sales Admin' || p.role === 'Front Office' || p.role === 'Admin',
   },
   {
     key: 'reports',
     label: 'Reports',
     href: '/reports',
-    allowedFn: (p) => p.role === 'Sales' || p.role === 'Accounts' || p.role === 'Admin',
+    allowedFn: (p) => p.role === 'Sales' || p.role === 'Sales Admin' || p.role === 'Accounts' || p.role === 'Admin',
   },
 ];

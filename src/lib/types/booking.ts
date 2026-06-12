@@ -109,6 +109,7 @@ export interface Booking {
 export interface BookingPaymentStatus {
   totalPaid: number;
   totalUnverified: number;
+  totalRefunded: number;
   billAmount: number;
   balance: number;
   hasFinalBill: boolean;

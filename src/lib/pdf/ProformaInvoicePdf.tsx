@@ -158,7 +158,7 @@ export function ProformaInvoicePdf({ booking: b, pi, entity }: ProformaInvoicePd
         <View style={{ marginTop: 8 }}>
           <Text style={{ fontSize: 8.5, color: colors.muted }}>1. Resort not liable for any damages due to circumstances beyond its control.</Text>
           <Text style={{ fontSize: 8.5, color: colors.muted }}>2. All disputes are subject to jurisdiction of Delhi.</Text>
-          <Text style={{ fontSize: 8.5, color: colors.muted }}>3. Payment to be made in favour of '{entity.payeeName}'.</Text>
+          <Text style={{ fontSize: 8.5, color: colors.muted }}>{`3. Payment to be made in favour of '${entity.payeeName}'.`}</Text>
         </View>
 
         {/* Signature */}

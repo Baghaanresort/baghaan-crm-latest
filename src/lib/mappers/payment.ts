@@ -17,6 +17,7 @@ export function dbToPayment(row: Record<string, any>): Payment {
     recordedAt: row['recorded_at'] as string,
     recordedBy: row['recorded_by'] as string,
     recordedByRole: (row['recorded_by_role'] as string) ?? '',
+    refundStatus: (row['refund_status'] as Payment['refundStatus']) ?? null,
   };
 }
 
@@ -36,5 +37,6 @@ export function paymentToDb(p: Payment): Record<string, unknown> {
     recorded_at: p.recordedAt,
     recorded_by: p.recordedBy,
     recorded_by_role: p.recordedByRole,
+    refund_status: p.refundStatus ?? null,
   };
 }

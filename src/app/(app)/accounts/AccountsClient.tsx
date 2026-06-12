@@ -1,9 +1,9 @@
 'use client';
 
 import { useState, useMemo, useTransition } from 'react';
-import { CheckCircle2, XCircle, Trash2, Download } from 'lucide-react';
+import { CheckCircle2, XCircle, Trash2, Download, IndianRupee } from 'lucide-react';
 import { toast } from 'sonner';
-import { verifyPayment, unverifyPayment, deletePayment } from '@/lib/actions/payments';
+import { verifyPayment, unverifyPayment, deletePayment, markRefundDone } from '@/lib/actions/payments';
 import { getBookingPaymentStatus } from '@/lib/utils/booking';
 import { fmtDate, todayISO, daysBetween } from '@/lib/utils/date';
 import type { Booking } from '@/lib/types/booking';
@@ -19,7 +19,7 @@ interface Props {
   currentUser: { id: string; name: string; role: UserRole };
 }
 
-type SubTab = 'verify' | 'ledger' | 'btc';
+type SubTab = 'verify' | 'refund' | 'ledger' | 'btc';
 
 export function AccountsClient({ initialBookings, initialPayments, currentUser }: Props) {
   const today = todayISO();
@@ -35,8 +35,20 @@ export function AccountsClient({ initialBookings, initialPayments, currentUser }
   const bookingMap = useMemo(() => new Map(bookings.map(b => [b.id, b])), [bookings]);
   const pStats = (b: Booking) => getBookingPaymentStatus(b, payments);
 
-  const unverified = useMemo(() => payments.filter(p => !p.verified).sort((a, b) => (a.recordedAt ?? '').localeCompare(b.recordedAt ?? '')), [payments]);
+  // Incoming payments awaiting verification — exclude refunds (those have their own tab).
+  const unverified = useMemo(() => payments.filter(p => p.type !== 'refund' && !p.verified).sort((a, b) => (a.recordedAt ?? '').localeCompare(b.recordedAt ?? '')), [payments]);
   const btcOpen = useMemo(() => bookings.filter(b => b.finalBill?.isBTC && pStats(b).balance > 0), [bookings, payments]);
+  // Refunds initiated by Sales after an approved cancellation; Accounts marks them done.
+  const refunds = useMemo(() => payments.filter(p => p.type === 'refund').sort((a, b) => (b.recordedAt ?? '').localeCompare(a.recordedAt ?? '')), [payments]);
+  const refundsPending = useMemo(() => refunds.filter(p => p.refundStatus !== 'done'), [refunds]);
+
+  const handleRefundDone = (id: string) => {
+    startTransition(async () => {
+      const result = await markRefundDone(id);
+      if (!result.success) { toast.error(result.error); return; }
+      toast.success('Refund marked done');
+    });
+  };
 
   const handleVerify = (id: string) => {
     startTransition(async () => {
@@ -76,7 +88,7 @@ export function AccountsClient({ initialBookings, initialPayments, currentUser }
       </div>
 
       <div className="flex items-end gap-1 mb-4 border-b border-stone-200">
-        {([['verify', 'Pending Verification'], ['ledger', 'Full Ledger'], ['btc', `BTC Receivables (${btcOpen.length})`]] as const).map(([k, label]) => {
+        {([['verify', 'Pending Verification'], ['refund', `Refunds (${refundsPending.length})`], ['ledger', 'Full Ledger'], ['btc', `BTC Receivables (${btcOpen.length})`]] as const).map(([k, label]) => {
           const isVerify = k === 'verify';
           const active = tab === k;
           return (
@@ -138,6 +150,63 @@ export function AccountsClient({ initialBookings, initialPayments, currentUser }
                               <CheckCircle2 size={13} /> VERIFY
                             </button>
                           </div>
+                        </td>
+                      )}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
+
+      {/* Refunds */}
+      {tab === 'refund' && (
+        <div className="bg-white border border-stone-200">
+          {refunds.length === 0 ? (
+            <div className="p-10 text-center text-stone-400 italic">No refunds to process ✓</div>
+          ) : (
+            <table className="w-full text-sm">
+              <thead className="bg-purple-900 text-purple-100">
+                <tr>
+                  <th className="text-left p-3 text-xs uppercase tracking-wider">Booking</th>
+                  <th className="text-left p-3 text-xs uppercase tracking-wider">Guest</th>
+                  <th className="text-left p-3 text-xs uppercase tracking-wider">Date</th>
+                  <th className="text-left p-3 text-xs uppercase tracking-wider">Mode</th>
+                  <th className="text-left p-3 text-xs uppercase tracking-wider">Reference</th>
+                  <th className="text-left p-3 text-xs uppercase tracking-wider">Initiated By</th>
+                  <th className="text-right p-3 text-xs uppercase tracking-wider">Amount</th>
+                  <th className="text-right p-3 text-xs uppercase tracking-wider">Status</th>
+                  {canVerify && <th className="text-right p-3 text-xs uppercase tracking-wider">Action</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {refunds.map(p => {
+                  const b = bookingMap.get(p.bookingId);
+                  const done = p.refundStatus === 'done';
+                  return (
+                    <tr key={p.id} className={`border-t border-stone-100 hover:bg-purple-50/30 ${done ? 'opacity-60' : ''}`}>
+                      <td className="p-3 font-mono text-xs">{b?.confirmationNumber ?? p.bookingId}</td>
+                      <td className="p-3">
+                        <div className="font-medium">{b?.guestName ?? '—'}</div>
+                        {b?.companyName && <div className="text-xs text-stone-500">{b.companyName}</div>}
+                      </td>
+                      <td className="p-3 text-xs">{fmtDate(p.paymentDate)}</td>
+                      <td className="p-3 text-xs">{p.mode}</td>
+                      <td className="p-3 text-xs text-stone-500">{p.reference || '—'}</td>
+                      <td className="p-3 text-xs text-stone-500">{p.recordedBy}</td>
+                      <td className="p-3 text-right font-medium text-purple-800">₹{p.amount.toLocaleString('en-IN')}</td>
+                      <td className="p-3 text-right text-xs">
+                        {done ? <span className="text-emerald-700 font-medium">✓ Refund Done</span> : <span className="text-amber-700">⏳ Pending</span>}
+                      </td>
+                      {canVerify && (
+                        <td className="p-3 text-right">
+                          {!done && (
+                            <button onClick={() => handleRefundDone(p.id)} disabled={isPending} className="inline-flex items-center gap-1.5 bg-purple-700 hover:bg-purple-800 text-white text-xs font-medium px-3 py-1.5 tracking-wider transition disabled:opacity-50">
+                              <IndianRupee size={13} /> MARK DONE
+                            </button>
+                          )}
                         </td>
                       )}
                     </tr>

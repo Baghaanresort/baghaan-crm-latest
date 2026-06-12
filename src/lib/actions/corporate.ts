@@ -42,7 +42,7 @@ export async function updateCostSheet(
   const supabase = await createClient();
   const actor = await getAuthedUser(supabase);
   if (!actor) return err('Not authenticated');
-  if (!['Sales', 'Front Office', 'Admin'].includes(actor.role)) {
+  if (!['Sales', 'Sales Admin', 'Front Office', 'Admin'].includes(actor.role)) {
     return err('Insufficient permissions');
   }
 
@@ -102,7 +102,7 @@ export async function sendCostSheet(bookingId: string): Promise<ActionResult> {
   const supabase = await createClient();
   const actor = await getAuthedUser(supabase);
   if (!actor) return err('Not authenticated');
-  if (!['Sales', 'Front Office', 'Admin'].includes(actor.role)) {
+  if (!['Sales', 'Sales Admin', 'Front Office', 'Admin'].includes(actor.role)) {
     return err('Insufficient permissions');
   }
 
@@ -145,7 +145,7 @@ export async function markCostSheetAccepted(bookingId: string): Promise<ActionRe
   const supabase = await createClient();
   const actor = await getAuthedUser(supabase);
   if (!actor) return err('Not authenticated');
-  if (!['Sales', 'Front Office', 'Admin'].includes(actor.role)) {
+  if (!['Sales', 'Sales Admin', 'Front Office', 'Admin'].includes(actor.role)) {
     return err('Insufficient permissions');
   }
 
@@ -188,7 +188,7 @@ export async function generateProformaInvoice(
   const supabase = await createClient();
   const actor = await getAuthedUser(supabase);
   if (!actor) return err('Not authenticated');
-  if (!['Sales', 'Admin'].includes(actor.role)) {
+  if (!['Sales', 'Sales Admin', 'Admin'].includes(actor.role)) {
     return err('Only Sales and Admin can generate proforma invoices');
   }
 
@@ -259,7 +259,7 @@ export async function createCorporateBooking(input: {
   const supabase = await createClient();
   const actor = await getAuthedUser(supabase);
   if (!actor) return err('Not authenticated');
-  if (!['Sales', 'Admin'].includes(actor.role)) {
+  if (!['Sales', 'Sales Admin', 'Admin'].includes(actor.role)) {
     return err('Only Sales and Admin can create corporate bookings');
   }
 
@@ -333,7 +333,7 @@ export async function checkInCorporate(bookingId: string): Promise<ActionResult>
   const supabase = await createClient();
   const actor = await getAuthedUser(supabase);
   if (!actor) return err('Not authenticated');
-  if (!['Front Office', 'Sales', 'Admin'].includes(actor.role)) return err('Insufficient permissions');
+  if (!['Front Office', 'Sales', 'Sales Admin', 'Admin'].includes(actor.role)) return err('Insufficient permissions');
 
   const { data: row } = await supabase.from('bookings').select('corporate_stage, booking_type').eq('id', bookingId).single();
   if (!row || row['booking_type'] !== 'corporate') return err('Corporate booking not found');
@@ -356,7 +356,7 @@ export async function completeCorporate(bookingId: string): Promise<ActionResult
   const supabase = await createClient();
   const actor = await getAuthedUser(supabase);
   if (!actor) return err('Not authenticated');
-  if (!['Front Office', 'Sales', 'Admin'].includes(actor.role)) return err('Insufficient permissions');
+  if (!['Front Office', 'Sales', 'Sales Admin', 'Admin'].includes(actor.role)) return err('Insufficient permissions');
 
   const { data: row } = await supabase.from('bookings').select('corporate_stage, booking_type').eq('id', bookingId).single();
   if (!row || row['booking_type'] !== 'corporate') return err('Corporate booking not found');
@@ -384,7 +384,7 @@ export async function markCorporateLost(bookingId: string, reason: string, note:
   const supabase = await createClient();
   const actor = await getAuthedUser(supabase);
   if (!actor) return err('Not authenticated');
-  if (!['Sales', 'Admin'].includes(actor.role)) return err('Only Sales and Admin can mark a deal lost');
+  if (!['Sales', 'Sales Admin', 'Admin'].includes(actor.role)) return err('Only Sales and Admin can mark a deal lost');
 
   const { data: row } = await supabase.from('bookings').select('corporate_stage, booking_type, status').eq('id', bookingId).single();
   if (!row || row['booking_type'] !== 'corporate') return err('Corporate booking not found');

@@ -2,14 +2,15 @@
 
 import { useState, useMemo, useTransition, useEffect } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { Plus, Calendar, Search, Ban, Edit2, FileText, Eye, Download, MessageCircle } from 'lucide-react';
+import { Plus, Calendar, Search, Ban, Edit2, FileText, Eye, Download, MessageCircle, CalendarClock, IndianRupee, Check, X } from 'lucide-react';
 import { toast } from 'sonner';
-import { cancelBooking } from '@/lib/actions/bookings';
+import { decideRequest, applyPostponement } from '@/lib/actions/requests';
 import { getEffectiveStatus, getBookingPaymentStatus } from '@/lib/utils/booking';
 import { fmtDate, todayISO } from '@/lib/utils/date';
 import { buildWaLink, WA_TEMPLATES } from '@/lib/constants/whatsapp';
 import type { Booking } from '@/lib/types/booking';
 import type { Payment } from '@/lib/types/payment';
+import type { BookingRequest } from '@/lib/types/request';
 import type { UserRole } from '@/lib/types/profile';
 import dynamic from 'next/dynamic';
 
@@ -17,10 +18,14 @@ const BookingModal = dynamic(() => import('@/components/bookings/BookingModal').
 const BlockModal = dynamic(() => import('@/components/bookings/BlockModal').then(m => ({ default: m.BlockModal })), { ssr: false });
 const PaymentModal = dynamic(() => import('@/components/payments/PaymentModal').then(m => ({ default: m.PaymentModal })), { ssr: false });
 const FinalBillModal = dynamic(() => import('@/components/front-office/FinalBillModal').then(m => ({ default: m.FinalBillModal })), { ssr: false });
+const CancelRequestModal = dynamic(() => import('@/components/bookings/RequestModals').then(m => ({ default: m.CancelRequestModal })), { ssr: false });
+const PostponeRequestModal = dynamic(() => import('@/components/bookings/RequestModals').then(m => ({ default: m.PostponeRequestModal })), { ssr: false });
+const RefundModal = dynamic(() => import('@/components/bookings/RequestModals').then(m => ({ default: m.RefundModal })), { ssr: false });
 
 interface Props {
   initialBookings: Booking[];
   initialPayments: Payment[];
+  initialRequests: BookingRequest[];
   users: Array<{ name: string; role: string }>;
   currentUser: { id: string; name: string; role: UserRole };
 }
@@ -35,20 +40,26 @@ const STATUS_TABS = [
   { key: 'cancelled', label: 'Cancelled', dot: 'bg-stone-400' },
 ] as const;
 
-export function BookingsClient({ initialBookings, initialPayments, users, currentUser }: Props) {
+export function BookingsClient({ initialBookings, initialPayments, initialRequests, users, currentUser }: Props) {
   const today = todayISO();
   const role = currentUser.role;
   const searchParams = useSearchParams();
   const router = useRouter();
   const isAdmin = role === 'Admin';
-  const isSales = role === 'Sales';
+  const isSalesAdmin = role === 'Sales Admin';
+  // Sales Admin can do everything Sales can — fold it into isSales for capability gates.
+  const isSales = role === 'Sales' || isSalesAdmin;
   const isFO = role === 'Front Office';
   const isOp = ['Kitchen', 'F&B'].includes(role);
+  const canRequestChange = isSales || isAdmin;     // request cancellation / postponement
+  const canApprove = isSalesAdmin || isAdmin;      // approve / reject those requests
+  const canInitiateRefund = isSales || isAdmin;    // record a refund on a cancelled booking
 
   // Read straight from props (not frozen useState) so router.refresh() — fired on
   // tab activation and after mutations — surfaces fresh server data without a reload.
   const bookings = initialBookings;
   const payments = initialPayments;
+  const requests = initialRequests;
   const [search, setSearch] = useState('');
   const [filterAgent, setFilterAgent] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
@@ -62,6 +73,9 @@ export function BookingsClient({ initialBookings, initialPayments, users, curren
   const [convertHold, setConvertHold] = useState<Booking | null>(null);
   const [paymentFor, setPaymentFor] = useState<Booking | null>(null);
   const [finalBillFor, setFinalBillFor] = useState<Booking | null>(null);
+  const [cancelReqFor, setCancelReqFor] = useState<Booking | null>(null);
+  const [postponeFor, setPostponeFor] = useState<Booking | null>(null);
+  const [refundFor, setRefundFor] = useState<Booking | null>(null);
   const [convertPrefill, setConvertPrefill] = useState<{ guestName: string; contactNumber: string; email: string; remarks: string; sourceEnquiryId: string } | null>(null);
 
   useEffect(() => {
@@ -79,6 +93,12 @@ export function BookingsClient({ initialBookings, initialPayments, users, curren
 
   const pStats = (b: Booking) => getBookingPaymentStatus(b, payments);
   const effStatus = (b: Booking) => getEffectiveStatus(b, payments);
+
+  const openCancelReq = (id: string) => requests.find(r => r.bookingId === id && r.type === 'cancellation' && r.status === 'pending') ?? null;
+  const openPostponeReq = (id: string) => requests.find(r => r.bookingId === id && r.type === 'postponement' && (r.status === 'pending' || r.status === 'approved')) ?? null;
+  const pendingApprovals = useMemo(() => requests.filter(r => r.status === 'pending'), [requests]);
+  const postponesToApply = useMemo(() => requests.filter(r => r.type === 'postponement' && r.status === 'approved'), [requests]);
+  const bookingById = useMemo(() => new Map(bookings.map(b => [b.id, b])), [bookings]);
 
   const agentNames = useMemo(() =>
     Array.from(new Set(users.map(u => u.name))).filter(Boolean),
@@ -142,12 +162,19 @@ export function BookingsClient({ initialBookings, initialPayments, users, curren
     }).sort((a, b) => b.arrival.localeCompare(a.arrival));
   }, [bookings, search, filterAgent, filterStatus, filterPayment, today]);
 
-  const handleCancel = (id: string) => {
-    if (!confirm('Cancel this reservation? The rooms will be released, but the booking record is kept for the log.')) return;
+  const handleDecide = (reqId: string, decision: 'approved' | 'rejected') => {
     startTransition(async () => {
-      const result = await cancelBooking(id);
-      if (!result.success) { toast.error(result.error); return; }
-      toast.success('Reservation cancelled');
+      const res = await decideRequest(reqId, decision);
+      if (!res.success) { toast.error(res.error); return; }
+      toast.success(decision === 'approved' ? 'Request approved' : 'Request rejected');
+    });
+  };
+
+  const handleApply = (reqId: string) => {
+    startTransition(async () => {
+      const res = await applyPostponement(reqId);
+      if (!res.success) { toast.error(res.error); return; }
+      toast.success('Booking postponed');
     });
   };
 
@@ -200,6 +227,48 @@ export function BookingsClient({ initialBookings, initialPayments, users, curren
           </div>
         ))}
       </div>
+
+      {/* Requests needing attention — approvals (Sales Admin/Admin) + approved postponements to apply */}
+      {((canApprove && pendingApprovals.length > 0) || (canRequestChange && postponesToApply.length > 0)) && (
+        <div className="mb-5 border border-amber-300 bg-amber-50">
+          <div className="px-4 py-2 bg-amber-100 text-amber-900 text-xs uppercase tracking-wider font-medium">Requests needing attention</div>
+          <div className="divide-y divide-amber-200">
+            {canApprove && pendingApprovals.map(r => {
+              const b = bookingById.get(r.bookingId);
+              return (
+                <div key={r.id} className="flex items-center justify-between gap-3 px-4 py-2.5 text-sm flex-wrap">
+                  <div className="min-w-0">
+                    <span className={`text-xs px-1.5 py-0.5 mr-2 ${r.type === 'cancellation' ? 'bg-red-100 text-red-700' : 'bg-amber-200 text-amber-800'}`}>{r.type === 'cancellation' ? 'Cancel' : 'Postpone'}</span>
+                    <span className="font-medium">{b?.guestName ?? r.bookingId}</span>
+                    <span className="text-stone-500 text-xs ml-2 font-mono">{b?.confirmationNumber}</span>
+                    {r.type === 'postponement' && r.payload && <span className="text-xs text-stone-600 ml-2">{fmtDate(r.payload.arrival)} → {fmtDate(r.payload.departure)}</span>}
+                    {r.reason && <span className="text-xs text-stone-500 italic ml-2">“{r.reason}”</span>}
+                    <span className="text-xs text-stone-400 ml-2">by {r.requestedBy}</span>
+                  </div>
+                  <div className="flex gap-1.5 flex-shrink-0">
+                    <button onClick={() => handleDecide(r.id, 'approved')} disabled={isPending} className="inline-flex items-center gap-1 text-xs bg-emerald-700 text-white px-3 py-1.5 hover:bg-emerald-800 disabled:opacity-50"><Check size={13} /> Approve</button>
+                    <button onClick={() => handleDecide(r.id, 'rejected')} disabled={isPending} className="inline-flex items-center gap-1 text-xs border border-stone-300 text-stone-600 px-3 py-1.5 hover:bg-stone-100 disabled:opacity-50"><X size={13} /> Reject</button>
+                  </div>
+                </div>
+              );
+            })}
+            {canRequestChange && postponesToApply.map(r => {
+              const b = bookingById.get(r.bookingId);
+              return (
+                <div key={r.id} className="flex items-center justify-between gap-3 px-4 py-2.5 text-sm flex-wrap">
+                  <div className="min-w-0">
+                    <span className="text-xs px-1.5 py-0.5 mr-2 bg-emerald-100 text-emerald-700">Postpone approved</span>
+                    <span className="font-medium">{b?.guestName ?? r.bookingId}</span>
+                    <span className="text-stone-500 text-xs ml-2 font-mono">{b?.confirmationNumber}</span>
+                    {r.payload && <span className="text-xs text-stone-600 ml-2">→ {fmtDate(r.payload.arrival)} → {fmtDate(r.payload.departure)}</span>}
+                  </div>
+                  <button onClick={() => handleApply(r.id)} disabled={isPending} className="inline-flex items-center gap-1 text-xs bg-amber-600 text-white px-3 py-1.5 hover:bg-amber-700 disabled:opacity-50 flex-shrink-0"><CalendarClock size={13} /> Apply dates</button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Status pill tabs + filter row */}
       <div className="mb-4 space-y-3">
@@ -309,6 +378,17 @@ export function BookingsClient({ initialBookings, initialPayments, users, curren
                           <span className={`text-xs px-1.5 py-0.5 ${payBadgeColor}`}>{payBadgeLabel}</span>
                         </div>
                       )}
+                      {(() => {
+                        const cr = openCancelReq(b.id);
+                        const pr = openPostponeReq(b.id);
+                        if (!cr && !pr) return null;
+                        return (
+                          <div className="mt-1 flex flex-col gap-0.5 items-start">
+                            {cr && <span className="text-xs px-1.5 py-0.5 bg-red-100 text-red-700">Cancellation pending</span>}
+                            {pr && <span className="text-xs px-1.5 py-0.5 bg-amber-100 text-amber-800">Postpone {pr.status === 'approved' ? 'approved' : 'pending'}</span>}
+                          </div>
+                        );
+                      })()}
                     </td>
                     {!isOp && <td className="p-3 text-right text-stone-700 text-xs">₹{b.totalAmount.toLocaleString('en-IN')}</td>}
                     {!isOp && (
@@ -349,9 +429,23 @@ export function BookingsClient({ initialBookings, initialPayments, users, curren
                             </button>
                           </>
                         )}
-                        {(isAdmin || isSales) && b.status !== 'cancelled' && b.bookingType !== 'corporate' && (
-                          <button onClick={() => handleCancel(b.id)} disabled={isPending} title="Cancel reservation" className="p-1.5 hover:bg-red-100 text-red-600 rounded disabled:opacity-50 transition-colors">
-                            <Ban size={13} />
+                        {canRequestChange && b.status !== 'cancelled' && b.bookingType !== 'corporate' && (
+                          <>
+                            {!openPostponeReq(b.id) && (
+                              <button onClick={() => setPostponeFor(b)} disabled={isPending} title="Request postponement" className="p-1.5 hover:bg-amber-100 text-amber-600 rounded disabled:opacity-50 transition-colors">
+                                <CalendarClock size={13} />
+                              </button>
+                            )}
+                            {!openCancelReq(b.id) && (
+                              <button onClick={() => setCancelReqFor(b)} disabled={isPending} title="Request cancellation" className="p-1.5 hover:bg-red-100 text-red-600 rounded disabled:opacity-50 transition-colors">
+                                <Ban size={13} />
+                              </button>
+                            )}
+                          </>
+                        )}
+                        {canInitiateRefund && b.status === 'cancelled' && b.bookingType !== 'corporate' && (
+                          <button onClick={() => setRefundFor(b)} disabled={isPending} title="Initiate refund" className="inline-flex items-center gap-1 text-xs border border-purple-300 text-purple-700 px-2 py-1 hover:bg-purple-50 disabled:opacity-50 transition-colors">
+                            <IndianRupee size={12} /> Refund
                           </button>
                         )}
                       </div>
@@ -371,6 +465,9 @@ export function BookingsClient({ initialBookings, initialPayments, users, curren
       {editBooking && <BookingModal booking={editBooking} users={users} currentUser={currentUser} existingBookings={bookings} onClose={() => setEditBooking(null)} />}
       {paymentFor && <PaymentModal booking={paymentFor} currentUser={currentUser} payments={payments.filter(p => p.bookingId === paymentFor.id)} onClose={() => setPaymentFor(null)} />}
       {finalBillFor && <FinalBillModal booking={finalBillFor} currentUser={currentUser} payments={payments.filter(p => p.bookingId === finalBillFor.id)} onClose={() => setFinalBillFor(null)} />}
+      {cancelReqFor && <CancelRequestModal booking={cancelReqFor} onClose={() => setCancelReqFor(null)} />}
+      {postponeFor && <PostponeRequestModal booking={postponeFor} onClose={() => setPostponeFor(null)} />}
+      {refundFor && <RefundModal booking={refundFor} payments={payments.filter(p => p.bookingId === refundFor.id)} onClose={() => setRefundFor(null)} />}
     </div>
   );
 }

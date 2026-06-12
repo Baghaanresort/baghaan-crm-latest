@@ -52,7 +52,7 @@ export async function createEnquiry(
   const supabase = await createClient();
   const actor = await getAuthedUser(supabase);
   if (!actor) return err('Not authenticated');
-  if (!['Sales', 'Admin'].includes(actor.role)) {
+  if (!['Sales', 'Sales Admin', 'Admin'].includes(actor.role)) {
     return err('Only Sales and Admin can create enquiries');
   }
 
@@ -123,7 +123,7 @@ export async function updateEnquiry(
   const supabase = await createClient();
   const actor = await getAuthedUser(supabase);
   if (!actor) return err('Not authenticated');
-  if (!['Sales', 'Admin'].includes(actor.role)) {
+  if (!['Sales', 'Sales Admin', 'Admin'].includes(actor.role)) {
     return err('Only Sales and Admin can update enquiries');
   }
 
@@ -292,7 +292,7 @@ export async function blockEnquiryRooms(
   const supabase = await createClient();
   const actor = await getAuthedUser(supabase);
   if (!actor) return err('Not authenticated');
-  if (!['Sales', 'Admin'].includes(actor.role)) return err('Only Sales and Admin can block rooms');
+  if (!['Sales', 'Sales Admin', 'Admin'].includes(actor.role)) return err('Only Sales and Admin can block rooms');
 
   const { data: enq } = await supabase
     .from('enquiries').select('name, phone, status, held_booking_id').eq('id', enquiryId).single();
@@ -348,7 +348,7 @@ export async function releaseEnquiryHold(enquiryId: string): Promise<ActionResul
   const supabase = await createClient();
   const actor = await getAuthedUser(supabase);
   if (!actor) return err('Not authenticated');
-  if (!['Sales', 'Admin'].includes(actor.role)) return err('Only Sales and Admin can release holds');
+  if (!['Sales', 'Sales Admin', 'Admin'].includes(actor.role)) return err('Only Sales and Admin can release holds');
 
   const { data: enq } = await supabase
     .from('enquiries').select('held_booking_id, status').eq('id', enquiryId).single();
@@ -385,7 +385,7 @@ export async function bookEnquiry(
   const supabase = await createClient();
   const actor = await getAuthedUser(supabase);
   if (!actor) return err('Not authenticated');
-  if (!['Sales', 'Admin'].includes(actor.role)) return err('Only Sales and Admin can book');
+  if (!['Sales', 'Sales Admin', 'Admin'].includes(actor.role)) return err('Only Sales and Admin can book');
 
   const { data: enq } = await supabase
     .from('enquiries').select('held_booking_id, status').eq('id', enquiryId).single();
@@ -397,9 +397,15 @@ export async function bookEnquiry(
   if (!bookingId) return err('No held booking found for this enquiry.');
 
   const { data: bk } = await supabase
-    .from('bookings').select('confirmation_number, status').eq('id', bookingId).single();
+    .from('bookings').select('confirmation_number, status, total_amount').eq('id', bookingId).single();
   if (!bk) return err('Held booking missing.');
   if (bk['status'] !== 'hold') return err('Held booking is no longer holdable.');
+  // A booking is the money-committed moment (voucher dispatches below). Never let a
+  // ₹0 booking through — the total should already be set at the PAY step, but this
+  // catches legacy holds blocked before that requirement existed.
+  if (Number(bk['total_amount'] ?? 0) <= 0) {
+    return err('Add the total package amount before booking. Open the hold and record it via the payment step.');
+  }
 
   const now = new Date().toISOString();
   // Reuse the held record: hold → confirmed is the moment it enters the Bookings tab.

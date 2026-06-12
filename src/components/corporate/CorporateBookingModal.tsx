@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition, useMemo, useEffect } from 'react';
+import { useState, useTransition, useMemo } from 'react';
 import { X } from 'lucide-react';
 import { toast } from 'sonner';
 import { createCorporateBooking } from '@/lib/actions/corporate';
@@ -24,7 +24,8 @@ export function CorporateBookingModal({ booking, users, currentUser, existingBoo
   const today = todayISO();
   const [isPending, startTransition] = useTransition();
 
-  const [form, setForm] = useState({
+  // Lazy initializer keeps the impure date math out of the render body.
+  const [form, setForm] = useState(() => ({
     companyName: booking?.companyName ?? '',
     companyAddress: booking?.companyAddress ?? '',
     companyGST: booking?.companyGST ?? '',
@@ -33,17 +34,14 @@ export function CorporateBookingModal({ booking, users, currentUser, existingBoo
     contactEmail: booking?.contactEmail ?? '',
     arrival: booking?.arrival ?? today,
     departure: booking?.departure ?? isoDate(new Date(Date.now() + 86400000)),
-    nights: booking?.nights ?? 1,
     rooms: booking?.rooms ?? [] as string[],
     guestCount: booking?.guestCount ?? { single: 0, double: 0, triple: 0 },
     remarks: booking?.remarks ?? '',
     createdBy: booking?.createdBy ?? currentUser.name,
-  });
+  }));
 
-  useEffect(() => {
-    const n = daysBetween(form.arrival, form.departure);
-    if (n !== form.nights) setForm(f => ({ ...f, nights: n }));
-  }, [form.arrival, form.departure]);
+  // Nights is derived from the dates — computed in render, not stored/synced.
+  const nights = daysBetween(form.arrival, form.departure);
 
   const occupiedRooms = useMemo(() => {
     const ranges = datesInRange(form.arrival, form.departure);
@@ -67,7 +65,7 @@ export function CorporateBookingModal({ booking, users, currentUser, existingBoo
   const handleSave = () => {
     if (!form.companyName.trim()) { toast.error('Company name is required'); return; }
     if (!form.contactNumber.trim()) { toast.error('Contact number is required'); return; }
-    if (form.nights < 1) { toast.error('Departure must be after arrival'); return; }
+    if (nights < 1) { toast.error('Departure must be after arrival'); return; }
 
     startTransition(async () => {
       if (isEdit && booking) {
@@ -80,7 +78,7 @@ export function CorporateBookingModal({ booking, users, currentUser, existingBoo
           contactEmail: form.contactEmail,
           arrival: form.arrival,
           departure: form.departure,
-          nights: form.nights,
+          nights,
           rooms: form.rooms,
           guestCount: form.guestCount,
           remarks: form.remarks,
@@ -89,7 +87,7 @@ export function CorporateBookingModal({ booking, users, currentUser, existingBoo
         if (!result.success) { toast.error(result.error); return; }
         toast.success('Corporate booking updated');
       } else {
-        const result = await createCorporateBooking(form);
+        const result = await createCorporateBooking({ ...form, nights });
         if (!result.success) { toast.error(result.error); return; }
         toast.success(`Corporate booking created: ${result.data.confirmationNumber}`);
       }
@@ -122,7 +120,7 @@ export function CorporateBookingModal({ booking, users, currentUser, existingBoo
           <div className="grid grid-cols-4 gap-4">
             <div><label className="text-xs text-stone-600 uppercase tracking-wider block mb-1">Arrival</label><DateInput value={form.arrival} onChange={v => handleArrivalChange(v)} className="w-full" /></div>
             <div><label className="text-xs text-stone-600 uppercase tracking-wider block mb-1">Departure</label><DateInput value={form.departure} min={form.arrival} onChange={v => setForm(f => ({ ...f, departure: v }))} className="w-full" /></div>
-            <div><label className="text-xs text-stone-600 uppercase tracking-wider block mb-1">Nights</label><input type="number" value={form.nights} readOnly className="w-full px-3 py-2 border border-stone-300 text-sm outline-none bg-stone-100" /></div>
+            <div><label className="text-xs text-stone-600 uppercase tracking-wider block mb-1">Nights</label><input type="number" value={nights} readOnly className="w-full px-3 py-2 border border-stone-300 text-sm outline-none bg-stone-100" /></div>
           </div>
           <div className="grid grid-cols-3 gap-4">
             {(['single', 'double', 'triple'] as const).map(type => (

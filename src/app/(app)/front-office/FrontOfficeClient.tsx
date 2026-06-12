@@ -1,6 +1,9 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useTransition } from 'react';
+import { LogIn, LogOut } from 'lucide-react';
+import { toast } from 'sonner';
+import { checkInBooking, checkOutBooking } from '@/lib/actions/bookings';
 import { fmtDate, todayISO } from '@/lib/utils/date';
 import { getBookingPaymentStatus } from '@/lib/utils/booking';
 import type { Booking } from '@/lib/types/booking';
@@ -17,38 +20,74 @@ interface Props {
   currentUser: { id: string; name: string; role: UserRole };
 }
 
-type SubTab = 'inhouse' | 'arrivals' | 'departures' | 'billstorecord';
+type SubTab = 'arrivals' | 'inhouse' | 'departures' | 'billstorecord';
 
 export function FrontOfficeClient({ initialBookings, initialPayments, currentUser }: Props) {
   const today = todayISO();
-  const [tab, setTab] = useState<SubTab>('inhouse');
+  const [tab, setTab] = useState<SubTab>('arrivals');
   const [paymentFor, setPaymentFor] = useState<Booking | null>(null);
   const [finalBillFor, setFinalBillFor] = useState<Booking | null>(null);
+  const [isPending, startTransition] = useTransition();
   const canAct = currentUser.role === 'Front Office' || currentUser.role === 'Admin';
 
   const bookings = initialBookings;
   const payments = initialPayments;
   const pStats = (b: Booking) => getBookingPaymentStatus(b, payments);
 
-  const inHouse = useMemo(() => bookings.filter(b => b.arrival <= today && b.departure > today), [bookings, today]);
-  const arriving = useMemo(() => bookings.filter(b => b.arrival === today).sort((a, b) => a.guestName.localeCompare(b.guestName)), [bookings, today]);
-  const departing = useMemo(() => bookings.filter(b => b.departure === today).sort((a, b) => a.guestName.localeCompare(b.guestName)), [bookings, today]);
-  const billsToRecord = useMemo(() => bookings.filter(b => b.arrival <= today && b.departure >= today && !b.finalBill), [bookings, today]);
+  // Status-driven (not date math): a guest is in-house only once Front Office has
+  // actually checked them in.
+  const arriving = useMemo(
+    () => bookings.filter(b => b.status === 'confirmed' && b.arrival === today).sort((a, b) => a.guestName.localeCompare(b.guestName)),
+    [bookings, today],
+  );
+  const inHouse = useMemo(
+    () => bookings.filter(b => b.status === 'checked_in' && b.departure > today).sort((a, b) => a.guestName.localeCompare(b.guestName)),
+    [bookings, today],
+  );
+  const departing = useMemo(
+    () => bookings.filter(b => b.status === 'checked_in' && b.departure === today).sort((a, b) => a.guestName.localeCompare(b.guestName)),
+    [bookings, today],
+  );
+  // Departed/at-checkout guests whose final bill hasn't been recorded yet.
+  const billsToRecord = useMemo(
+    () => bookings.filter(b => (b.status === 'checked_in' || b.status === 'checked_out') && b.departure <= today && !b.finalBill),
+    [bookings, today],
+  );
 
   const lists: Record<SubTab, { title: string; items: Booking[]; empty: string }> = {
+    arrivals: { title: "Today's Arrivals", items: arriving, empty: 'No arrivals to check in' },
     inhouse: { title: 'In-House Guests', items: inHouse, empty: 'No guests in-house' },
-    arrivals: { title: "Today's Arrivals", items: arriving, empty: 'No arrivals today' },
     departures: { title: "Today's Departures", items: departing, empty: 'No departures today' },
     billstorecord: { title: 'Bills to Record', items: billsToRecord, empty: 'All bills recorded ✓' },
   };
 
   const activeList = lists[tab]!;
 
+  // Front Office collects money only at checkout, so Pay/Bill appear once the guest
+  // is at/after departure. Advances during the stay are taken by Sales (bookings tab).
+  const atCheckout = (b: Booking) => b.departure <= today && (b.status === 'checked_in' || b.status === 'checked_out');
+
+  const handleCheckIn = (id: string) => {
+    startTransition(async () => {
+      const res = await checkInBooking(id);
+      if (!res.success) { toast.error(res.error); return; }
+      toast.success('Guest checked in');
+    });
+  };
+
+  const handleCheckOut = (id: string) => {
+    startTransition(async () => {
+      const res = await checkOutBooking(id);
+      if (!res.success) { toast.error(res.error); return; }
+      toast.success('Guest checked out');
+    });
+  };
+
   return (
     <div>
       <div className="mb-6 pb-4 border-b border-stone-300">
         <h2 className="text-2xl text-emerald-900" style={{ fontFamily: "'Cormorant Garamond', serif", fontWeight: 600 }}>Front Office Operations</h2>
-        <p className="text-sm text-stone-500 italic">Today's check-ins, in-house guests, and folios</p>
+        <p className="text-sm text-stone-500 italic">Check in arrivals, manage in-house guests, settle at checkout</p>
       </div>
 
       {/* Sub-tabs */}
@@ -100,9 +139,23 @@ export function FrontOfficeClient({ initialBookings, initialPayments, currentUse
                     <td className={`p-3 text-right text-xs font-medium ${ps.balance > 0 ? 'text-red-700' : 'text-emerald-700'}`}>₹{Math.abs(ps.balance).toLocaleString('en-IN')}{ps.balance < 0 ? ' CR' : ''}</td>
                     {canAct && (
                       <td className="p-3 text-right">
-                        <div className="flex gap-1 justify-end">
-                          <button onClick={() => setPaymentFor(b)} className="text-xs bg-emerald-700 text-white px-2.5 py-1 hover:bg-emerald-800">+ PAY</button>
-                          <button onClick={() => setFinalBillFor(b)} className="text-xs bg-blue-700 text-white px-2.5 py-1 hover:bg-blue-800">BILL</button>
+                        <div className="flex gap-1 justify-end items-center">
+                          {b.status === 'confirmed' && b.arrival <= today && (
+                            <button onClick={() => handleCheckIn(b.id)} disabled={isPending} className="inline-flex items-center gap-1 text-xs bg-emerald-700 text-white px-2.5 py-1 hover:bg-emerald-800 disabled:opacity-50">
+                              <LogIn size={12} /> CHECK IN
+                            </button>
+                          )}
+                          {b.status === 'checked_in' && (
+                            <button onClick={() => handleCheckOut(b.id)} disabled={isPending} className="inline-flex items-center gap-1 text-xs border border-stone-300 text-stone-700 px-2.5 py-1 hover:bg-stone-100 disabled:opacity-50">
+                              <LogOut size={12} /> CHECK OUT
+                            </button>
+                          )}
+                          {atCheckout(b) && (
+                            <>
+                              <button onClick={() => setPaymentFor(b)} className="text-xs bg-emerald-700 text-white px-2.5 py-1 hover:bg-emerald-800">+ PAY</button>
+                              <button onClick={() => setFinalBillFor(b)} className="text-xs bg-blue-700 text-white px-2.5 py-1 hover:bg-blue-800">BILL</button>
+                            </>
+                          )}
                         </div>
                       </td>
                     )}
