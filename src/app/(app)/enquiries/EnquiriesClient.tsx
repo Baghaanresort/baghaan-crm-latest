@@ -10,6 +10,7 @@ import { buildWaLink, WA_TEMPLATES } from '@/lib/constants/whatsapp';
 import { addDays } from '@/lib/utils/date';
 import { fmtDate, todayISO } from '@/lib/utils/date';
 import { BlockModal } from '@/components/bookings/BlockModal';
+import { BookingPreviewModal } from '@/components/bookings/BookingPreviewModal';
 import { PaymentModal } from '@/components/payments/PaymentModal';
 import type { Enquiry } from '@/lib/types/enquiry';
 import type { Booking } from '@/lib/types/booking';
@@ -23,10 +24,25 @@ const EnquiryViewModal = dynamic(() => import('@/components/enquiries/EnquiryVie
 interface Props {
   initialEnquiries: Enquiry[];
   heldBookings: Booking[];
+  activeBookings: Booking[];
   heldPayments: Payment[];
   users: Array<{ name: string; role: string }>;
   currentUser: { id: string; name: string; role: UserRole };
 }
+
+// Per-status pill styling. Tailwind can't build class names from variables at
+// runtime, so each status needs its full literal classes. Idle pills stay neutral
+// white; the status color appears only on hover and when the tab is active.
+const PILL_STYLES: Record<string, { active: string; hover: string }> = {
+  all: { active: 'bg-emerald-900 text-amber-100', hover: 'hover:border-emerald-700 hover:text-emerald-900' },
+  new: { active: 'bg-blue-700 text-white', hover: 'hover:border-blue-600 hover:text-blue-700' },
+  in_progress: { active: 'bg-amber-600 text-white', hover: 'hover:border-amber-500 hover:text-amber-700' },
+  rooms_blocked: { active: 'bg-orange-600 text-white', hover: 'hover:border-orange-500 hover:text-orange-700' },
+  advance_pending: { active: 'bg-purple-700 text-white', hover: 'hover:border-purple-500 hover:text-purple-700' },
+  advance_confirmed: { active: 'bg-teal-700 text-white', hover: 'hover:border-teal-500 hover:text-teal-700' },
+  booked: { active: 'bg-emerald-700 text-white', hover: 'hover:border-emerald-600 hover:text-emerald-800' },
+  lost: { active: 'bg-stone-600 text-white', hover: 'hover:border-stone-500 hover:text-stone-700' },
+};
 
 function leadAge(createdAt: string): string {
   const days = Math.floor((Date.now() - new Date(createdAt).getTime()) / 86_400_000);
@@ -35,7 +51,7 @@ function leadAge(createdAt: string): string {
   return `${days}d`;
 }
 
-export function EnquiriesClient({ initialEnquiries, heldBookings, heldPayments, users, currentUser }: Props) {
+export function EnquiriesClient({ initialEnquiries, heldBookings, activeBookings, heldPayments, users, currentUser }: Props) {
   const today = todayISO();
   const router = useRouter();
   // Read straight from props — the route re-renders with fresh server data after
@@ -52,6 +68,7 @@ export function EnquiriesClient({ initialEnquiries, heldBookings, heldPayments, 
   const [lostDialog, setLostDialog] = useState<{ enquiry: Enquiry; reason: string; otherText: string; renurtureAfter: number | null } | null>(null);
   const [blockFor, setBlockFor] = useState<Enquiry | null>(null);
   const [payFor, setPayFor] = useState<Enquiry | null>(null);
+  const [bookFor, setBookFor] = useState<Enquiry | null>(null);
 
   const heldById = useMemo(() => new Map(heldBookings.map(b => [b.id, b])), [heldBookings]);
   const paysByBooking = useMemo(() => {
@@ -122,6 +139,7 @@ export function EnquiriesClient({ initialEnquiries, heldBookings, heldPayments, 
       const result = await bookEnquiry(e.id);
       if (!result.success) { toast.error(result.error); return; }
       toast.success(`Booked · ${result.data.confirmationNumber}`);
+      setBookFor(null);
       router.refresh();
     });
   };
@@ -216,19 +234,23 @@ export function EnquiriesClient({ initialEnquiries, heldBookings, heldPayments, 
       {/* Status pill tabs + search/filter row */}
       <div className="mb-4 space-y-3">
         <div className="flex gap-1.5 flex-wrap">
-          {([['all', 'All'], ...Object.entries(ENQUIRY_STATUSES).map(([k, v]) => [k, v.label])] as [string, string][]).map(([key, label]) => (
+          {([['all', 'All'], ...Object.entries(ENQUIRY_STATUSES).map(([k, v]) => [k, v.label])] as [string, string][]).map(([key, label]) => {
+            const pill = PILL_STYLES[key] ?? PILL_STYLES.all!;
+            const isActive = filterStatus === key;
+            return (
             <button
               key={key}
               onClick={() => setFilterStatus(key)}
-              className={`px-3 py-1.5 text-xs tracking-wider transition flex items-center gap-1.5 ${filterStatus === key ? 'bg-emerald-900 text-amber-100' : 'bg-white border border-stone-300 text-stone-600 hover:bg-stone-50'}`}
+              className={`px-3 py-1.5 text-xs tracking-wider transition cursor-pointer flex items-center gap-1.5 ${isActive ? pill.active : `bg-white border border-stone-300 text-stone-600 ${pill.hover} hover:-translate-y-px hover:shadow-sm`}`}
             >
               {key !== 'all' && (
                 <span className={`w-1.5 h-1.5 rounded-full ${ENQUIRY_STATUSES[key as Enquiry['status']]?.dot ?? 'bg-stone-400'}`} />
               )}
               {label}
-              <span className={`${filterStatus === key ? 'text-amber-300' : 'text-stone-400'}`}>({statusCounts[key] ?? 0})</span>
+              <span className={isActive ? 'text-white/70' : 'text-stone-400'}>({statusCounts[key] ?? 0})</span>
             </button>
-          ))}
+            );
+          })}
         </div>
 
         <div className="flex gap-3 flex-wrap">
@@ -285,7 +307,7 @@ export function EnquiriesClient({ initialEnquiries, heldBookings, heldPayments, 
                       <div className="font-medium text-stone-900">{e.name || '(No name)'}</div>
                       <div className="text-xs text-stone-500">{e.phone}</div>
                       {e.email && <div className="text-xs text-stone-400">{e.email}</div>}
-                      {e.preferredDates && <div className="text-xs text-stone-400 italic mt-0.5">{e.preferredDates}</div>}
+                      {e.preferredDates && <div className="text-xs text-stone-400 italic mt-0.5">{fmtDate(e.preferredDates)}</div>}
                     </td>
                     <td className="p-3">
                       <div className="text-xs font-medium text-stone-700">{e.source}</div>
@@ -342,7 +364,7 @@ export function EnquiriesClient({ initialEnquiries, heldBookings, heldPayments, 
                               <span className="text-xs text-purple-600 italic px-2 py-1">Awaiting Accounts</span>
                             )}
                             {e.status === 'advance_confirmed' && (
-                              <button onClick={() => handleBook(e)} disabled={isPending}
+                              <button onClick={() => setBookFor(e)} disabled={isPending}
                                 className="text-xs border border-emerald-600 px-2 py-1 hover:bg-emerald-50 text-emerald-700 disabled:opacity-50 whitespace-nowrap">
                                 Book →
                               </button>
@@ -415,8 +437,8 @@ export function EnquiriesClient({ initialEnquiries, heldBookings, heldPayments, 
       {blockFor && (
         <BlockModal
           currentUser={currentUser}
-          existingBookings={heldBookings}
-          enquiry={{ id: blockFor.id, name: blockFor.name, phone: blockFor.phone }}
+          existingBookings={activeBookings}
+          enquiry={{ id: blockFor.id, name: blockFor.name, phone: blockFor.phone, preferredDates: blockFor.preferredDates }}
           onBlocked={() => { setBlockFor(null); router.refresh(); }}
           onClose={() => setBlockFor(null)}
         />
@@ -427,6 +449,15 @@ export function EnquiriesClient({ initialEnquiries, heldBookings, heldPayments, 
           payments={paysByBooking.get(payFor.heldBookingId) ?? []}
           currentUser={currentUser}
           onClose={() => { setPayFor(null); router.refresh(); }}
+        />
+      )}
+      {bookFor && (
+        <BookingPreviewModal
+          bookingId={bookFor.heldBookingId}
+          guestName={bookFor.name}
+          isPending={isPending}
+          onConfirm={() => handleBook(bookFor)}
+          onClose={() => setBookFor(null)}
         />
       )}
     </div>

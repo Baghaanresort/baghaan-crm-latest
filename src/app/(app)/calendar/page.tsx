@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
-import { getBookings } from '@/lib/queries/bookings';
+import { getBookingsForCalendar } from '@/lib/queries/bookings';
 import { CalendarClient } from './CalendarClient';
 
 export interface MaintenanceBlock {
@@ -19,7 +19,7 @@ export default async function CalendarPage() {
   if (!profile) redirect('/login');
 
   const [bookings, maintenanceRes] = await Promise.all([
-    getBookings(),
+    getBookingsForCalendar(),
     supabase
       .from('maintenance_blocks')
       .select('*')

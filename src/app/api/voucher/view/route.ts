@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { createHmac } from 'crypto';
 import { createClient } from '@/lib/supabase/server';
 import { dbToBooking } from '@/lib/mappers/booking';
+import { getVerifiedPaymentsForBooking } from '@/lib/queries/payments';
 import { buildVoucherHTML } from '@/lib/utils/print';
 
 function makeToken(bookingId: string): string {
@@ -19,7 +20,8 @@ export async function GET(request: NextRequest) {
   const { data, error } = await supabase.from('bookings').select('*').eq('id', bookingId).single();
   if (error || !data) return new Response('Not found', { status: 404 });
 
-  const html = buildVoucherHTML(dbToBooking(data));
+  const payments = await getVerifiedPaymentsForBooking(bookingId);
+  const html = buildVoucherHTML(dbToBooking(data), payments);
   return new Response(html, {
     headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'private, no-cache' },
   });

@@ -6,7 +6,8 @@ import { toast } from 'sonner';
 import { createBlockedRoom, updateBooking } from '@/lib/actions/bookings';
 import { blockEnquiryRooms } from '@/lib/actions/enquiries';
 import { ROOM_INVENTORY } from '@/lib/constants/rooms';
-import { datesInRange, isoDate, daysBetween, todayISO, addDays } from '@/lib/utils/date';
+import { datesInRange, isoDate, daysBetween, todayISO, addDays, fmtDate } from '@/lib/utils/date';
+import { isValidPhone, PHONE_ERROR } from '@/lib/validations/phone';
 import { DateInput } from '@/components/ui/DateInput';
 import { NumberInput } from '@/components/ui/NumberInput';
 import type { Booking } from '@/lib/types/booking';
@@ -15,7 +16,7 @@ interface Props {
   currentUser: { name: string; role: string };
   existingBookings: Booking[];
   booking?: Booking;
-  enquiry?: { id: string; name: string; phone: string };
+  enquiry?: { id: string; name: string; phone: string; preferredDates?: string };
   onConvert?: (hold: Booking) => void;
   onBlocked?: () => void;
   onClose: () => void;
@@ -35,6 +36,11 @@ export function BlockModal({ currentUser, existingBookings, booking, enquiry, on
 
   const seedName = booking?.guestName ?? enquiry?.name ?? '';
   const seedPhone = booking?.contactNumber ?? enquiry?.phone ?? '';
+  // Blocking straight from an enquiry: do NOT default the check-in to today. The
+  // enquiry's intended dates live only in free-text `preferredDates`, so a future
+  // stay would silently land on today's date if left at the default. Force the
+  // user to pick the date deliberately (empty seed + validation below).
+  const isEnquiryBlock = !!enquiry && !booking;
 
   // Lazy initializer: the impure date math runs once at mount, not on every render.
   const [form, setForm] = useState(() => {
@@ -43,8 +49,8 @@ export function BlockModal({ currentUser, existingBookings, booking, enquiry, on
     return {
       guestName: seedName,
       contactNumber: seedPhone,
-      arrival: booking?.arrival ?? today,
-      departure: booking?.departure ?? isoDate(new Date(Date.now() + 86400000)),
+      arrival: booking?.arrival ?? (isEnquiryBlock ? '' : today),
+      departure: booking?.departure ?? (isEnquiryBlock ? '' : isoDate(new Date(Date.now() + 86400000))),
       adults: booking?.adults ?? 2,
       children: booking?.children ?? 0,
       rooms: booking?.rooms ?? ([] as string[]),
@@ -89,6 +95,9 @@ export function BlockModal({ currentUser, existingBookings, booking, enquiry, on
   const handleSave = () => {
     if (!form.guestName.trim()) { toast.error('Guest name is required'); return; }
     if (!form.contactNumber.trim()) { toast.error('Contact number is required'); return; }
+    if (!isValidPhone(form.contactNumber)) { toast.error(PHONE_ERROR); return; }
+    if (!form.arrival) { toast.error('Select the check-in date'); return; }
+    if (!form.departure) { toast.error('Select the check-out date'); return; }
     if (form.rooms.length === 0) { toast.error('Select at least one room to block'); return; }
     if (nights < 1) { toast.error('Departure must be after arrival'); return; }
     const quoted = form.quotedAmount.trim() === '' ? 0 : Number(form.quotedAmount);
@@ -147,12 +156,19 @@ export function BlockModal({ currentUser, existingBookings, booking, enquiry, on
         <div className="p-6 space-y-5">
           <div className="grid grid-cols-2 gap-4">
             <div><label className="text-xs text-stone-600 uppercase tracking-wider block mb-1">Guest Name *</label><input value={form.guestName} onChange={e => update('guestName', e.target.value)} className="w-full px-3 py-2 border border-stone-300 text-sm outline-none bg-white" /></div>
-            <div><label className="text-xs text-stone-600 uppercase tracking-wider block mb-1">Contact Number *</label><input value={form.contactNumber} onChange={e => update('contactNumber', e.target.value)} className="w-full px-3 py-2 border border-stone-300 text-sm outline-none bg-white" /></div>
+            <div><label className="text-xs text-stone-600 uppercase tracking-wider block mb-1">Contact Number *</label><input type="tel" inputMode="tel" maxLength={20} value={form.contactNumber} onChange={e => update('contactNumber', e.target.value)} className="w-full px-3 py-2 border border-stone-300 text-sm outline-none bg-white" /></div>
           </div>
+          {isEnquiryBlock && (
+            <div className="bg-blue-50 border-l-4 border-blue-500 p-3 text-xs text-blue-900">
+              {enquiry?.preferredDates
+                ? <>Guest&apos;s preferred dates: <strong className="not-italic">{fmtDate(enquiry.preferredDates)}</strong> — set the check-in &amp; check-out below to match.</>
+                : <>Set the guest&apos;s actual check-in &amp; check-out below — it does not default to today.</>}
+            </div>
+          )}
           <div className="grid grid-cols-5 gap-3">
             <div><label className="text-xs text-stone-600 uppercase tracking-wider block mb-1">Arrival</label><DateInput value={form.arrival} onChange={v => handleArrivalChange(v)} className="w-full" /></div>
             <div><label className="text-xs text-stone-600 uppercase tracking-wider block mb-1">Departure</label><DateInput value={form.departure} min={form.arrival} onChange={v => update('departure', v)} className="w-full" /></div>
-            <div><label className="text-xs text-stone-600 uppercase tracking-wider block mb-1">Nights</label><input type="number" value={nights} readOnly className="w-full px-3 py-2 border border-stone-300 text-sm outline-none bg-stone-100" /></div>
+            <div><label className="text-xs text-stone-600 uppercase tracking-wider block mb-1">Nights</label><input type="number" value={Number.isFinite(nights) ? nights : ''} readOnly className="w-full px-3 py-2 border border-stone-300 text-sm outline-none bg-stone-100" /></div>
             <div><label className="text-xs text-stone-600 uppercase tracking-wider block mb-1">Adults</label><NumberInput value={form.adults} min={0} onChange={n => update('adults', n)} className="w-full px-3 py-2 border border-stone-300 text-sm outline-none bg-white" /></div>
             <div><label className="text-xs text-stone-600 uppercase tracking-wider block mb-1">Children</label><NumberInput value={form.children} min={0} onChange={n => update('children', n)} className="w-full px-3 py-2 border border-stone-300 text-sm outline-none bg-white" /></div>
           </div>

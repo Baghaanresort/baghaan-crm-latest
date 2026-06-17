@@ -43,6 +43,13 @@ function getShortRoomName(room: string, cat: RoomCategory): string {
   return room;
 }
 
+// Blocked rooms (status='hold') are tentative and must NOT inflate occupancy or
+// other KPIs — only a real booking (confirmed / checked-in / checked-out) counts
+// a room as physically occupied. Holds still render on the grid (yellow bars).
+function countsAsOccupied(b: Booking): boolean {
+  return b.status === 'confirmed' || b.status === 'checked_in' || b.status === 'checked_out';
+}
+
 interface Props {
   initialBookings: Booking[];
   maintenanceBlocks: MaintenanceBlock[];
@@ -232,7 +239,7 @@ export function CalendarClient({ initialBookings: bookings, maintenanceBlocks }:
     let revenueImpact = 0;
 
     bookings.forEach((b) => {
-      if (b.status === 'cancelled') return;
+      if (!countsAsOccupied(b)) return;
       // Month revenue
       if (b.arrival.startsWith(`${year}-${String(month + 1).padStart(2, '0')}`)) {
         revenueImpact += b.totalAmount ?? 0;
@@ -279,7 +286,7 @@ export function CalendarClient({ initialBookings: bookings, maintenanceBlocks }:
     return days.map((day) => {
       const bookedRooms = new Set<string>();
       bookings.forEach((b) => {
-        if (b.status === 'cancelled') return;
+        if (!countsAsOccupied(b)) return;
         if (b.arrival <= day.date && b.departure > day.date) {
           (b.rooms ?? []).forEach((r) => bookedRooms.add(r));
         }

@@ -7,6 +7,7 @@ import { createCorporateBooking } from '@/lib/actions/corporate';
 import { updateBooking } from '@/lib/actions/bookings';
 import { ROOM_INVENTORY } from '@/lib/constants/rooms';
 import { datesInRange, isoDate, daysBetween, todayISO, addDays } from '@/lib/utils/date';
+import { isValidPhone, PHONE_ERROR } from '@/lib/validations/phone';
 import { DateInput } from '@/components/ui/DateInput';
 import { NumberInput } from '@/components/ui/NumberInput';
 import type { Booking } from '@/lib/types/booking';
@@ -65,6 +66,7 @@ export function CorporateBookingModal({ booking, users, currentUser, existingBoo
   const handleSave = () => {
     if (!form.companyName.trim()) { toast.error('Company name is required'); return; }
     if (!form.contactNumber.trim()) { toast.error('Contact number is required'); return; }
+    if (!isValidPhone(form.contactNumber)) { toast.error(PHONE_ERROR); return; }
     if (nights < 1) { toast.error('Departure must be after arrival'); return; }
 
     startTransition(async () => {
@@ -114,7 +116,7 @@ export function CorporateBookingModal({ booking, users, currentUser, existingBoo
           </div>
           <div className="grid grid-cols-3 gap-4">
             <div><label className="text-xs text-stone-600 uppercase tracking-wider block mb-1">Contact Name</label><input value={form.contactName} onChange={e => setForm(f => ({ ...f, contactName: e.target.value }))} className="w-full px-3 py-2 border border-stone-300 text-sm outline-none bg-white" /></div>
-            <div><label className="text-xs text-stone-600 uppercase tracking-wider block mb-1">Contact Number *</label><input value={form.contactNumber} onChange={e => setForm(f => ({ ...f, contactNumber: e.target.value }))} className="w-full px-3 py-2 border border-stone-300 text-sm outline-none bg-white" /></div>
+            <div><label className="text-xs text-stone-600 uppercase tracking-wider block mb-1">Contact Number *</label><input type="tel" inputMode="tel" maxLength={20} value={form.contactNumber} onChange={e => setForm(f => ({ ...f, contactNumber: e.target.value }))} className="w-full px-3 py-2 border border-stone-300 text-sm outline-none bg-white" /></div>
             <div><label className="text-xs text-stone-600 uppercase tracking-wider block mb-1">Contact Email</label><input value={form.contactEmail} onChange={e => setForm(f => ({ ...f, contactEmail: e.target.value }))} className="w-full px-3 py-2 border border-stone-300 text-sm outline-none bg-white" /></div>
           </div>
           <div className="grid grid-cols-4 gap-4">

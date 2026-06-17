@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import { getEnquiries } from '@/lib/queries/enquiries';
+import { getActiveBookings } from '@/lib/queries/bookings';
 import { releaseExpiredEnquiryHolds } from '@/lib/actions/enquiries';
 import { dbToBooking } from '@/lib/mappers/booking';
 import { dbToPayment } from '@/lib/mappers/payment';
@@ -17,9 +18,10 @@ export default async function EnquiriesPage() {
   // Release any expired holds before reading the list, so stages are current.
   await releaseExpiredEnquiryHolds();
 
-  const [enquiries, usersData] = await Promise.all([
+  const [enquiries, usersData, activeBookings] = await Promise.all([
     getEnquiries(),
     supabase.from('profiles').select('name, role').in('role', ['Admin', 'Sales', 'Accounts', 'Front Office']),
+    getActiveBookings(),
   ]);
 
   // Pull the held bookings + their payments for in-flight enquiries (Block summary + PAY).
@@ -37,6 +39,7 @@ export default async function EnquiriesPage() {
     <EnquiriesClient
       initialEnquiries={enquiries}
       heldBookings={heldBookings}
+      activeBookings={activeBookings}
       heldPayments={heldPayments}
       users={(usersData.data ?? []) as Array<{ name: string; role: string }>}
       currentUser={{ id: user.id, name: profile.name as string, role: profile.role as UserRole }}

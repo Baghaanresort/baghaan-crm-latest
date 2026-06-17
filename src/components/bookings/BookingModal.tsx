@@ -8,6 +8,7 @@ import { updateVoucher } from '@/lib/actions/vouchers';
 import { markEnquiryConverted } from '@/lib/actions/enquiries';
 import { ROOM_INVENTORY, DEFAULT_RATES, getRoomCategory } from '@/lib/constants/rooms';
 import { datesInRange, isoDate, daysBetween, todayISO, addDays } from '@/lib/utils/date';
+import { isValidPhone, PHONE_ERROR } from '@/lib/validations/phone';
 import { DateInput } from '@/components/ui/DateInput';
 import { NumberInput } from '@/components/ui/NumberInput';
 import type { Booking } from '@/lib/types/booking';
@@ -119,6 +120,7 @@ export function BookingModal({ booking, users, currentUser, existingBookings, pr
   const handleSave = () => {
     if (!form.guestName.trim()) { toast.error('Guest name is required'); return; }
     if (!form.contactNumber.trim()) { toast.error('Contact number is required'); return; }
+    if (!isValidPhone(form.contactNumber)) { toast.error(PHONE_ERROR); return; }
     if (form.rooms.length === 0) { toast.error('Select at least one room'); return; }
     if (nights < 1) { toast.error('Departure must be after arrival'); return; }
 
@@ -171,7 +173,7 @@ export function BookingModal({ booking, users, currentUser, existingBookings, pr
           <Section title="Guest Details">
             <div className="grid grid-cols-2 gap-4">
               <Field label="Guest Name *" value={form.guestName} onChange={v => update('guestName', v)} />
-              <Field label="Contact Number *" value={form.contactNumber} onChange={v => update('contactNumber', v)} />
+              <Field label="Contact Number *" type="tel" value={form.contactNumber} onChange={v => update('contactNumber', v)} />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <Field label="Email" value={form.email} onChange={v => update('email', v)} type="email" />

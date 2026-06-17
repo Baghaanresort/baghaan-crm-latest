@@ -1,9 +1,10 @@
 import { z } from 'zod';
+import { phoneSchema } from './phone';
 
 export const BookingSchema = z
   .object({
     guestName: z.string().min(1, 'Guest name is required'),
-    contactNumber: z.string().min(1, 'Contact number is required'),
+    contactNumber: phoneSchema,
     email: z.string().email().optional().or(z.literal('')),
     companyName: z.string().optional().default(''),
     gstNumber: z.string().optional().default(''),
@@ -55,7 +56,7 @@ export const FinalBillSchema = z.object({
 export const BlockRoomSchema = z
   .object({
     guestName: z.string().min(1, 'Guest name is required'),
-    contactNumber: z.string().min(1, 'Contact number is required'),
+    contactNumber: phoneSchema,
     arrival: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Invalid date'),
     departure: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Invalid date'),
     nights: z.number().int().min(1),

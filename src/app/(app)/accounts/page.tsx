@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
-import { getBookings } from '@/lib/queries/bookings';
+import { getBookingsForAccounts } from '@/lib/queries/bookings';
 import { getPayments } from '@/lib/queries/payments';
 import type { UserRole } from '@/lib/types/profile';
 import { AccountsClient } from './AccountsClient';
@@ -12,7 +12,7 @@ export default async function AccountsPage() {
   const { data: profile } = await supabase.from('profiles').select('name, role').eq('id', user.id).single();
   if (!profile) redirect('/login');
 
-  const [bookings, payments] = await Promise.all([getBookings(), getPayments()]);
+  const [bookings, payments] = await Promise.all([getBookingsForAccounts(), getPayments()]);
 
   return (
     <AccountsClient

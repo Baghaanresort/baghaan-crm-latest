@@ -1,9 +1,10 @@
 import { z } from 'zod';
+import { phoneSchema } from './phone';
 
 export const EnquirySchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   name: z.string().min(1, 'Guest name is required'),
-  phone: z.string().min(1, 'Phone / WhatsApp number is required'),
+  phone: phoneSchema,
   email: z.string().email().optional().or(z.literal('')),
   source: z.string().min(1, 'Source is required'),
   enquiryType: z.string().optional().default(''),
@@ -19,7 +20,7 @@ export const EnquirySchema = z.object({
 export const UpdateEnquirySchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   name: z.string().optional(),
-  phone: z.string().min(1).optional(),
+  phone: phoneSchema.optional(),
   email: z.string().email().optional().or(z.literal('')).optional(),
   source: z.string().optional(),
   enquiryType: z.string().optional(),

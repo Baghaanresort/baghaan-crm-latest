@@ -7,7 +7,7 @@ import { requestCancellation, requestPostponement } from '@/lib/actions/requests
 import { initiateRefund } from '@/lib/actions/payments';
 import { getBookingPaymentStatus } from '@/lib/utils/booking';
 import { PAYMENT_MODES } from '@/lib/constants/payments';
-import { todayISO, daysBetween } from '@/lib/utils/date';
+import { todayISO, daysBetween, fmtDate } from '@/lib/utils/date';
 import { DateInput } from '@/components/ui/DateInput';
 import { NumberInput } from '@/components/ui/NumberInput';
 import type { Booking } from '@/lib/types/booking';
@@ -106,7 +106,7 @@ export function PostponeRequestModal({ booking, onClose }: { booking: Booking; o
   return (
     <Shell title="Request Postponement" subtitle={`${booking.confirmationNumber} · ${booking.guestName}`} accent="bg-amber-600" onClose={onClose}>
       <div className="text-xs text-stone-500">
-        Current: <span className="font-medium text-stone-700">{booking.arrival} → {booking.departure}</span> ({booking.nights}n)
+        Current: <span className="font-medium text-stone-700">{fmtDate(booking.arrival)} → {fmtDate(booking.departure)}</span> ({booking.nights}n)
       </div>
       <div className="grid grid-cols-3 gap-3">
         <div><label className={labelCls}>New Arrival</label><DateInput value={arrival} min={todayISO()} onChange={setArrival} className="w-full" /></div>

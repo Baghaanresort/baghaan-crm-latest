@@ -8,6 +8,7 @@ import { createEnquiry, updateEnquiry } from '@/lib/actions/enquiries';
 import { getEnquiryActivities } from '@/lib/actions/activities';
 import { ENQUIRY_SOURCES, ENQUIRY_TYPES, ENQUIRY_STATUSES, LOST_REASONS } from '@/lib/constants/enquiry';
 import { todayISO } from '@/lib/utils/date';
+import { isValidPhone, PHONE_ERROR } from '@/lib/validations/phone';
 import { DateInput } from '@/components/ui/DateInput';
 import type { Enquiry, EnquiryActivity } from '@/lib/types/enquiry';
 import { ActivityTimeline } from '@/components/enquiries/ActivityTimeline';
@@ -54,6 +55,7 @@ export function EnquiryModal({ enquiry, users, currentUser, onClose }: Props) {
   const handleSave = () => {
     if (!form.name.trim()) { toast.error('Guest name is required'); return; }
     if (!form.phone.trim()) { toast.error('Phone number is required'); return; }
+    if (!isValidPhone(form.phone)) { toast.error(PHONE_ERROR); return; }
     if (!form.source) { toast.error('Source is required'); return; }
 
     const resolvedLostReason = form.status === 'lost'
@@ -144,7 +146,7 @@ export function EnquiryModal({ enquiry, users, currentUser, onClose }: Props) {
                 </div>
                 <div>
                   <label className={labelClass}>Phone / WhatsApp *</label>
-                  <input value={form.phone} onChange={e => update('phone', e.target.value)} className={fieldClass} />
+                  <input type="tel" inputMode="tel" maxLength={20} value={form.phone} onChange={e => update('phone', e.target.value)} className={fieldClass} />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4 mt-4">

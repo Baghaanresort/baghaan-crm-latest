@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server';
 import { ok, err, type ActionResult } from '@/lib/types/result';
 import { logCorporateActivity } from '@/lib/server/corporateEngine';
 import { CORPORATE_STAGES, corporateStageStep } from '@/lib/constants/corporate';
+import { isValidPhone, normalizePhone, PHONE_ERROR } from '@/lib/validations/phone';
 import type { CostSheet, LineItem, ProformaInvoice, CorporateStage } from '@/lib/types/booking';
 import type { CorporateActivityEntry } from '@/lib/types/corporate-activity';
 
@@ -262,6 +263,7 @@ export async function createCorporateBooking(input: {
   if (!['Sales', 'Sales Admin', 'Admin'].includes(actor.role)) {
     return err('Only Sales and Admin can create corporate bookings');
   }
+  if (!isValidPhone(input.contactNumber)) return err(PHONE_ERROR);
 
   const { data: metaRow } = await supabase
     .from('meta')
@@ -280,7 +282,7 @@ export async function createCorporateBooking(input: {
     id,
     confirmation_number: confirmationNumber,
     guest_name: input.contactName || input.companyName,
-    contact_number: input.contactNumber,
+    contact_number: normalizePhone(input.contactNumber),
     email: input.contactEmail || '',
     company_name: input.companyName,
     gst_number: '',
