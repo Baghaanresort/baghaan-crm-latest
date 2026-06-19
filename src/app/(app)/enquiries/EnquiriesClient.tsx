@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Plus, Search, Edit2, Download, MessageCircle, Eye } from 'lucide-react';
 import { toast } from 'sonner';
 import { updateEnquiry, bookEnquiry, releaseEnquiryHold } from '@/lib/actions/enquiries';
+import { sendAdvanceRequest } from '@/lib/actions/transactions';
 import { ENQUIRY_STATUSES, ENQUIRY_SOURCES, LOST_REASONS } from '@/lib/constants/enquiry';
 import { buildWaLink, WA_TEMPLATES } from '@/lib/constants/whatsapp';
 import { addDays } from '@/lib/utils/date';
@@ -149,6 +150,16 @@ export function EnquiriesClient({ initialEnquiries, heldBookings, activeBookings
       const result = await releaseEnquiryHold(e.id);
       if (!result.success) { toast.error(result.error); return; }
       toast.success('Hold released');
+      router.refresh();
+    });
+  };
+
+  const handleSendAdvance = (e: Enquiry) => {
+    if (!e.heldBookingId) { toast.error('No held booking for this enquiry'); return; }
+    startTransition(async () => {
+      const result = await sendAdvanceRequest(e.heldBookingId!);
+      if (!result.success) { toast.error(result.error); return; }
+      toast.success(`Payment link sent to guest — ${result.data.shortUrl}`);
       router.refresh();
     });
   };
@@ -350,6 +361,10 @@ export function EnquiriesClient({ initialEnquiries, heldBookings, activeBookings
                             )}
                             {e.status === 'rooms_blocked' && (
                               <>
+                                <button onClick={() => handleSendAdvance(e)} disabled={isPending || !e.heldBookingId}
+                                  className="text-xs border border-blue-500 px-2 py-1 hover:bg-blue-50 text-blue-700 disabled:opacity-50 whitespace-nowrap">
+                                  Send Advance Request
+                                </button>
                                 <button onClick={() => setPayFor(e)} disabled={isPending}
                                   className="text-xs border border-purple-500 px-2 py-1 hover:bg-purple-50 text-purple-700 disabled:opacity-50">
                                   Pay
@@ -361,7 +376,13 @@ export function EnquiriesClient({ initialEnquiries, heldBookings, activeBookings
                               </>
                             )}
                             {e.status === 'advance_pending' && (
-                              <span className="text-xs text-purple-600 italic px-2 py-1">Awaiting Accounts</span>
+                              <>
+                                <button onClick={() => handleSendAdvance(e)} disabled={isPending || !e.heldBookingId}
+                                  className="text-xs border border-blue-500 px-2 py-1 hover:bg-blue-50 text-blue-700 disabled:opacity-50 whitespace-nowrap">
+                                  Resend Advance Request
+                                </button>
+                                <span className="text-xs text-purple-600 italic px-2 py-1">Awaiting Accounts</span>
+                              </>
                             )}
                             {e.status === 'advance_confirmed' && (
                               <button onClick={() => setBookFor(e)} disabled={isPending}
