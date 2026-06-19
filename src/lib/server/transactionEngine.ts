@@ -1,11 +1,15 @@
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { createPaymentLink } from '@/lib/server/razorpay';
-import { toPaise } from '@/lib/utils/money';
+import { toPaise, fromPaise } from '@/lib/utils/money';
 import { buildReferenceId, computeAdvance, nextLinkVersion } from '@/lib/server/transaction-helpers';
 import { paymentLinkToDb } from '@/lib/mappers/transactions';
+import { paymentToDb } from '@/lib/mappers/payment';
 import { sendPaymentRequest, type MsgBooking } from '@/lib/server/messaging';
-import { ADVANCE_DEFAULT_PCT_KEY, ADVANCE_DEFAULT_PCT_FALLBACK, type PaymentLinkPurpose } from '@/lib/constants/transactions';
+import { onPaymentVerified, syncEnquiryStageFromPayment } from '@/lib/server/payment-sync';
+import { ADVANCE_DEFAULT_PCT_KEY, ADVANCE_DEFAULT_PCT_FALLBACK, purposeToPaymentType, type PaymentLinkPurpose } from '@/lib/constants/transactions';
+import type { ParsedEvent } from '@/lib/server/razorpay-events';
+import type { Payment } from '@/lib/types/payment';
 
 async function advancePct(supabase: SupabaseClient): Promise<number> {
   const { data } = await supabase.from('meta').select('value').eq('key', ADVANCE_DEFAULT_PCT_KEY).single();
@@ -81,4 +85,67 @@ export async function requestAdvance(
   return createAndSendLink(supabase, {
     row, purpose: 'advance', amountRupees: amount, actor: opts?.actor ?? 'system',
   });
+}
+
+const SYSTEM_ACTOR = { id: 'razorpay-webhook', name: 'Razorpay (auto)' };
+
+// Records a captured Razorpay payment into the ledger (idempotent), advances enquiry/corporate
+// state, but does NOT confirm the booking — that stays a human click (bookEnquiry).
+export async function onPaymentLinkPaid(supabase: SupabaseClient, ev: ParsedEvent): Promise<void> {
+  if (!ev.linkId || !ev.paymentId) return;
+
+  const { data: link } = await supabase.from('payment_links').select('*').eq('razorpay_link_id', ev.linkId).single();
+  if (!link) { console.error('[onPaymentLinkPaid] no link for', ev.linkId); return; }
+
+  const bookingId = link['booking_id'] as string;
+  const amountRupees = fromPaise(ev.amountPaise ?? Number(link['amount']));
+
+  // Idempotency: a unique index guards razorpay_payment_id, but check first to avoid a noisy error.
+  const { data: dup } = await supabase.from('payments').select('id').eq('razorpay_payment_id', ev.paymentId).maybeSingle();
+  if (dup) return;
+
+  const now = new Date().toISOString();
+  const payment: Payment = {
+    id: `PAY-${Date.now()}`,
+    bookingId,
+    paymentDate: now.slice(0, 10),
+    amount: amountRupees,
+    mode: 'razorpay',
+    reference: ev.paymentId,
+    type: purposeToPaymentType(link['purpose'] as PaymentLinkPurpose),
+    notes: `Razorpay ${link['purpose']} · link ${ev.linkId}`,
+    verified: true,
+    verifiedBy: SYSTEM_ACTOR.name,
+    verifiedAt: now,
+    recordedAt: now,
+    recordedBy: SYSTEM_ACTOR.name,
+    recordedByRole: 'System',
+    refundStatus: null,
+  };
+  const dbRow = { ...paymentToDb(payment), razorpay_payment_id: ev.paymentId, razorpay_link_id: ev.linkId };
+  // The unique index on razorpay_payment_id is the real idempotency backstop: a concurrent
+  // replay that slips past the maybeSingle check will trip 23505 — swallow it, don't 500
+  // (re-processing the webhook would otherwise double-verify and re-advance state).
+  const { error: insErr } = await supabase.from('payments').insert(dbRow);
+  if (insErr) {
+    if (insErr.code === '23505') return; // duplicate payment — already recorded
+    console.error('[onPaymentLinkPaid] insert', insErr);
+    return;
+  }
+
+  await supabase.from('payment_links').update({
+    status: 'paid', amount_paid: ev.amountPaidPaise ?? Number(link['amount']),
+    paid_at: now, updated_at: now,
+  }).eq('id', link['id']);
+
+  await onPaymentVerified(supabase, bookingId, amountRupees, SYSTEM_ACTOR);
+  await syncEnquiryStageFromPayment(supabase, bookingId);
+}
+
+export async function onPaymentLinkPartiallyPaid(supabase: SupabaseClient, ev: ParsedEvent): Promise<void> {
+  if (!ev.linkId) return;
+  await supabase.from('payment_links').update({
+    status: 'partially_paid', amount_paid: ev.amountPaidPaise ?? 0, updated_at: new Date().toISOString(),
+  }).eq('razorpay_link_id', ev.linkId);
+  // Deliberately NO auto-verify on a short advance — a human reconciles partials.
 }
