@@ -87,6 +87,34 @@ export async function requestAdvance(
   });
 }
 
+// Outstanding = total (or final bill) − verified payments, in rupees.
+export async function requestBalance(
+  supabase: SupabaseClient, bookingId: string, opts?: { amountRupees?: number; actor?: string },
+): Promise<{ shortUrl: string }> {
+  const { data: row } = await supabase.from('bookings')
+    .select('id, guest_name, contact_number, email, confirmation_number, source_enquiry_id, total_amount, final_bill, booking_type')
+    .eq('id', bookingId).single();
+  if (!row) throw new Error('Booking not found');
+
+  const finalBill = row['final_bill'] as { totalAmount?: number } | null;
+  const billTotal = finalBill && Number(finalBill.totalAmount ?? 0) > 0
+    ? Number(finalBill.totalAmount) : Number(row['total_amount'] ?? 0);
+
+  const { data: pays } = await supabase.from('payments')
+    .select('amount, verified, type').eq('booking_id', bookingId);
+  const paid = (pays ?? [])
+    .filter((p) => p['verified'] === true && p['type'] !== 'refund')
+    .reduce((s, p) => s + Number(p['amount'] ?? 0), 0);
+
+  const outstanding = Math.max(0, Math.round(billTotal - paid));
+  const amount = opts?.amountRupees ?? outstanding;
+  if (!(amount > 0)) throw new Error('Nothing outstanding to collect.');
+  if (amount > outstanding) throw new Error('Amount exceeds the outstanding balance.');
+
+  const purpose = finalBill && Number(finalBill.totalAmount ?? 0) > 0 ? 'final_bill' : 'balance';
+  return createAndSendLink(supabase, { row, purpose, amountRupees: amount, actor: opts?.actor ?? 'system' });
+}
+
 const SYSTEM_ACTOR = { id: 'razorpay-webhook', name: 'Razorpay (auto)' };
 
 // Records a captured Razorpay payment into the ledger (idempotent), advances enquiry/corporate

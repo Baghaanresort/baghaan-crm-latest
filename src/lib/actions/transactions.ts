@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { ok, err, type ActionResult } from '@/lib/types/result';
-import { requestAdvance } from '@/lib/server/transactionEngine';
+import { requestAdvance, requestBalance } from '@/lib/server/transactionEngine';
 
 async function getAuthedUser(supabase: Awaited<ReturnType<typeof createClient>>) {
   const { data: { user } } = await supabase.auth.getUser();
@@ -32,5 +32,28 @@ export async function sendAdvanceRequest(
   } catch (e) {
     console.error('[sendAdvanceRequest]', e);
     return err(e instanceof Error ? e.message : 'Failed to create payment link');
+  }
+}
+
+export async function sendBalanceRequest(
+  bookingId: string, amountRupees?: number,
+): Promise<ActionResult<{ shortUrl: string }>> {
+  if (!bookingId) return err('Booking ID required');
+  const supabase = await createClient();
+  const actor = await getAuthedUser(supabase);
+  if (!actor) return err('Not authenticated');
+  if (!['Sales', 'Sales Admin', 'Front Office', 'Admin'].includes(actor.role)) return err('Insufficient permissions');
+
+  try {
+    const opts: { actor: string; amountRupees?: number } = { actor: actor.name };
+    if (amountRupees !== undefined) opts.amountRupees = amountRupees;
+    const res = await requestBalance(supabase, bookingId, opts);
+    revalidatePath('/bookings');
+    revalidatePath('/front-office');
+    revalidatePath('/accounts');
+    return ok(res);
+  } catch (e) {
+    console.error('[sendBalanceRequest]', e);
+    return err(e instanceof Error ? e.message : 'Failed to create balance link');
   }
 }

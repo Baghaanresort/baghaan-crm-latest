@@ -2,9 +2,10 @@
 
 import { useState, useMemo, useTransition, useEffect } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { Plus, Calendar, Search, Ban, Edit2, FileText, Eye, Download, MessageCircle, CalendarClock, IndianRupee, Check, X } from 'lucide-react';
+import { Plus, Calendar, Search, Ban, Edit2, FileText, Eye, Download, MessageCircle, CalendarClock, IndianRupee, Check, X, Send } from 'lucide-react';
 import { toast } from 'sonner';
 import { decideRequest, applyPostponement } from '@/lib/actions/requests';
+import { sendBalanceRequest } from '@/lib/actions/transactions';
 import { getEffectiveStatus, getBookingPaymentStatus } from '@/lib/utils/booking';
 import { fmtDate, todayISO } from '@/lib/utils/date';
 import { buildWaLink, WA_TEMPLATES } from '@/lib/constants/whatsapp';
@@ -175,6 +176,14 @@ export function BookingsClient({ initialBookings, initialPayments, initialReques
       const res = await applyPostponement(reqId);
       if (!res.success) { toast.error(res.error); return; }
       toast.success('Booking postponed');
+    });
+  };
+
+  const handleRequestBalance = (b: Booking) => {
+    startTransition(async () => {
+      const res = await sendBalanceRequest(b.id);
+      if (!res.success) { toast.error(res.error); return; }
+      toast.success('Balance payment link sent');
     });
   };
 
@@ -428,6 +437,11 @@ export function BookingsClient({ initialBookings, initialPayments, initialReques
                               <FileText size={13} />
                             </button>
                           </>
+                        )}
+                        {(isSales || isFO || isAdmin) && eff === 'confirmed' && b.status !== 'cancelled' && b.bookingType !== 'corporate' && ps.balance > 0 && (
+                          <button onClick={() => handleRequestBalance(b)} disabled={isPending} title="Request balance payment" className="inline-flex items-center gap-1 text-xs border border-emerald-300 text-emerald-700 px-2 py-1 hover:bg-emerald-50 disabled:opacity-50 transition-colors">
+                            <Send size={12} /> Balance
+                          </button>
                         )}
                         {canRequestChange && b.status !== 'cancelled' && b.bookingType !== 'corporate' && (
                           <>
