@@ -36,7 +36,8 @@ occupancy calendar, and role-scoped dashboards. Hindi/Indian-hospitality domain
 ## Architecture
 
 **Stack:** Next.js 16 App Router · React 19 · Supabase (Postgres + Auth) · Tailwind v4 ·
-Zod v4 · react-hook-form · framer-motion · sonner (toasts). Path alias `@/*` → `src/*`.
+Zod v4 · react-hook-form · framer-motion · sonner (toasts) · `@react-pdf/renderer` (PDFs).
+Path alias `@/*` → `src/*`.
 
 ### Request/data flow — the core pattern
 
@@ -65,8 +66,9 @@ This codebase follows a strict layered server-first flow. Mirror it for new feat
 - **Auth is checked at every layer** — middleware, the route-group `layout.tsx`, the
   `page.tsx`, *and* inside each Server Action (`getAuthedUser` helper). Don't assume an
   upper layer already guarded it.
-- **Roles & permissions:** roles are defined in `src/lib/types/profile.ts` (11 roles;
-  7 "operational" read-only roles). `usePermissions()` (`src/hooks/usePermissions.ts`)
+- **Roles & permissions:** roles are defined in `src/lib/types/profile.ts` (`ALL_ROLES`,
+  12 roles; `OPERATIONAL_ROLES`, the 7 read-only ops roles).
+  `usePermissions()` (`src/hooks/usePermissions.ts`)
   derives boolean capabilities for the client; `DEFAULT_TAB_BY_ROLE` and `ALL_TABS`
   (`src/lib/constants/roles.ts`) drive landing pages and nav visibility. Permission
   checks in actions must be re-implemented server-side — the hook is UI-only.
@@ -86,9 +88,12 @@ App Router with three route groups under `src/app/`:
 `middleware.ts` (repo root) enforces auth globally, redirects authed users away from
 public routes, and skips `/api/export` & `/api/print` (those handlers check auth themselves).
 
-API routes (`src/app/api/`) handle PDF/HTML **print** views (`/print/voucher`, `/cost-sheet`,
-`/pi`), CSV **exports** (`/export/bookings|payments|enquiries`), the Supabase auth
-**callback**, and voucher viewing.
+API routes (`src/app/api/`) generate documents two ways: HTML **print** views rendered
+server-side (`/print/voucher|cost-sheet|pi|menu`, printed from the browser) and true binary
+**PDFs** via `@react-pdf/renderer` (`/pdf/cost-sheet`, `/pdf/pi`, `runtime = 'nodejs'`, React
+components + registered fonts in `src/lib/pdf/`). They also handle CSV **exports**
+(`/export/bookings|payments|enquiries`), the Supabase auth **callback**, voucher viewing
+(`/voucher/view`), and an admin conflict-repair endpoint (`/admin/fix-conflicts`).
 
 ### Domain notes
 
@@ -101,4 +106,10 @@ API routes (`src/app/api/`) handle PDF/HTML **print** views (`/print/voucher`, `
   preserve this check when touching booking create/update.
 - Confirmation numbers are generated from a `meta.booking_counter` row (see
   `getCounter`/`saveCounter`); booking edits are journaled to a `booking_history` table.
-- DB schema changes live in `supabase/migrations/`.
+- **Corporate automation** lives in `src/lib/server/corporateEngine.ts` (`server-only`):
+  `runCorporateAutomation` advances `corporateStage` on triggering events and
+  `logCorporateActivity` appends to the `corporate_activity` audit table (never throws —
+  logging must not break its caller). Invoked from the `corporate` and `payments` actions,
+  not from clients.
+- DB schema changes live in `supabase/migrations/` (numbered `000`–`008`, plus
+  `full_setup.sql` and `performance_indexes.sql`).
