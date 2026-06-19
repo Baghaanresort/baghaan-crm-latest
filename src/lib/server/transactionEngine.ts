@@ -1,6 +1,6 @@
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { createPaymentLink } from '@/lib/server/razorpay';
+import { createPaymentLink, getPaymentLink } from '@/lib/server/razorpay';
 import { toPaise, fromPaise } from '@/lib/utils/money';
 import { buildReferenceId, computeAdvance, nextLinkVersion } from '@/lib/server/transaction-helpers';
 import { paymentLinkToDb } from '@/lib/mappers/transactions';
@@ -200,4 +200,36 @@ export async function onPaymentLinkPartiallyPaid(supabase: SupabaseClient, ev: P
     status: 'partially_paid', amount_paid: ev.amountPaidPaise ?? 0, updated_at: new Date().toISOString(),
   }).eq('razorpay_link_id', ev.linkId);
   // Deliberately NO auto-verify on a short advance — a human reconciles partials.
+}
+
+// Poll Razorpay for non-terminal links and apply the paid handler if Razorpay shows paid.
+// Covers webhooks that were missed/delayed.
+export async function reconcileOpenLinks(supabase: SupabaseClient): Promise<{ checked: number; reconciled: number }> {
+  const { data: open } = await supabase.from('payment_links')
+    .select('id, razorpay_link_id, amount')
+    .in('status', ['created', 'sent', 'partially_paid'])
+    .lt('created_at', new Date(Date.now() - 10 * 60 * 1000).toISOString()); // older than 10 min
+
+  let reconciled = 0;
+  for (const link of open ?? []) {
+    const rzpId = link['razorpay_link_id'] as string | null;
+    if (!rzpId) continue;
+    const remote = await getPaymentLink(rzpId);
+    if (remote.status === 'paid') {
+      // Synthesize the same shape onPaymentLinkPaid expects. payment id comes from the link's payments[].
+      const payments = (remote as unknown as { payments?: Array<{ payment_id?: string }> }).payments ?? [];
+      const paymentId = payments[0]?.payment_id;
+      if (paymentId) {
+        await onPaymentLinkPaid(supabase, {
+          kind: 'payment_link_paid', linkId: rzpId, referenceId: remote.reference_id,
+          paymentId, amountPaise: remote.amount, amountPaidPaise: remote.amount_paid,
+        });
+        reconciled++;
+      }
+    } else if (remote.status === 'cancelled' || remote.status === 'expired') {
+      await supabase.from('payment_links').update({ status: remote.status, updated_at: new Date().toISOString() })
+        .eq('id', link['id']);
+    }
+  }
+  return { checked: (open ?? []).length, reconciled };
 }
