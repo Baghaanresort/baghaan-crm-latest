@@ -1,23 +1,48 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { X, CheckCircle2, ShieldCheck } from 'lucide-react';
+import { X, CheckCircle2, ShieldCheck, Copy, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
 import { addPayment } from '@/lib/actions/payments';
 import { PAYMENT_MODES, FO_AUTO_VERIFY_MODES } from '@/lib/constants/payments';
 import { fmtDate, todayISO } from '@/lib/utils/date';
+import { fromPaise, formatINR } from '@/lib/utils/money';
 import { DateInput } from '@/components/ui/DateInput';
 import type { Booking } from '@/lib/types/booking';
 import type { Payment } from '@/lib/types/payment';
+import type { PaymentLink, OutboundMessage } from '@/lib/types/transactions';
+import type { PaymentLinkStatus, OutboundStatus } from '@/lib/constants/transactions';
 
 interface Props {
   booking: Booking;
   currentUser: { name: string; role: string };
   payments: Payment[];
+  // Razorpay payment links + outbound delivery messages for this booking (read-only).
+  // Optional: list surfaces that don't load them (e.g. Bookings) simply omit them.
+  paymentLinks?: PaymentLink[];
+  messages?: OutboundMessage[];
   onClose: () => void;
 }
 
-export function PaymentModal({ booking, currentUser, payments, onClose }: Props) {
+// Badge colours reuse the modal's existing emerald/amber/purple/red/stone palette.
+const LINK_STATUS_STYLE: Record<PaymentLinkStatus, string> = {
+  paid: 'bg-emerald-100 text-emerald-700',
+  partially_paid: 'bg-amber-100 text-amber-700',
+  sent: 'bg-blue-100 text-blue-700',
+  created: 'bg-stone-100 text-stone-600',
+  cancelled: 'bg-stone-200 text-stone-500',
+  expired: 'bg-red-100 text-red-700',
+};
+
+const MSG_STATUS_STYLE: Record<OutboundStatus, string> = {
+  delivered: 'bg-emerald-100 text-emerald-700',
+  read: 'bg-emerald-100 text-emerald-700',
+  sent: 'bg-blue-100 text-blue-700',
+  queued: 'bg-stone-100 text-stone-600',
+  failed: 'bg-red-100 text-red-700',
+};
+
+export function PaymentModal({ booking, currentUser, payments, paymentLinks = [], messages = [], onClose }: Props) {
   const today = todayISO();
   const [isPending, startTransition] = useTransition();
   // An enquiry-linked hold may have been blocked without a quote. The advance is a
@@ -182,6 +207,53 @@ export function PaymentModal({ booking, currentUser, payments, onClose }: Props)
                       <td className="py-1.5 text-stone-500">{p.reference || '—'}</td>
                       <td className="py-1.5 text-right font-medium">₹{p.amount.toLocaleString('en-IN')}</td>
                       <td className="py-1.5 text-right">{p.verified ? <span className="text-emerald-700">✓ Verified</span> : <span className="text-purple-700">⏳ Pending</span>}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* Payment links — what was sent and whether it was paid. Read-only. */}
+          {paymentLinks.length > 0 && (
+            <div>
+              <h4 className="text-xs uppercase tracking-wider text-stone-600 border-b border-stone-200 pb-1 mb-2">Payment Links</h4>
+              <table className="w-full text-xs">
+                <thead><tr className="text-stone-500"><th className="text-left py-1">Purpose</th><th className="text-right py-1">Amount</th><th className="text-left py-1 pl-3">Status</th><th className="text-right py-1">Link</th></tr></thead>
+                <tbody>
+                  {paymentLinks.map(l => (
+                    <tr key={l.id} className="border-t border-stone-100">
+                      <td className="py-1.5 capitalize">{l.purpose.replace(/_/g, ' ')}</td>
+                      <td className="py-1.5 text-right font-medium">{formatINR(fromPaise(l.amount))}</td>
+                      <td className="py-1.5 pl-3"><span className={`px-1.5 py-0.5 capitalize ${LINK_STATUS_STYLE[l.status]}`}>{l.status.replace(/_/g, ' ')}</span></td>
+                      <td className="py-1.5 text-right">
+                        {l.shortUrl ? (
+                          <span className="inline-flex items-center gap-1.5 justify-end">
+                            <a href={l.shortUrl} target="_blank" rel="noopener noreferrer" title="Open payment link" className="p-1 hover:bg-stone-100 text-stone-600 rounded"><ExternalLink size={12} /></a>
+                            <button type="button" onClick={() => { navigator.clipboard?.writeText(l.shortUrl!); toast.success('Link copied'); }} title="Copy payment link" className="p-1 hover:bg-stone-100 text-stone-600 rounded"><Copy size={12} /></button>
+                          </span>
+                        ) : <span className="text-stone-400">—</span>}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* Outbound messages — delivery status of WhatsApp/email notifications. Read-only. */}
+          {messages.length > 0 && (
+            <div>
+              <h4 className="text-xs uppercase tracking-wider text-stone-600 border-b border-stone-200 pb-1 mb-2">Messages Sent</h4>
+              <table className="w-full text-xs">
+                <thead><tr className="text-stone-500"><th className="text-left py-1">Channel</th><th className="text-left py-1">Purpose</th><th className="text-left py-1">Status</th><th className="text-right py-1">Sent</th></tr></thead>
+                <tbody>
+                  {messages.map(m => (
+                    <tr key={m.id} className="border-t border-stone-100">
+                      <td className="py-1.5 capitalize">{m.channel}</td>
+                      <td className="py-1.5 capitalize">{m.purpose.replace(/_/g, ' ')}</td>
+                      <td className="py-1.5"><span className={`px-1.5 py-0.5 capitalize ${MSG_STATUS_STYLE[m.status]}`}>{m.status}</span></td>
+                      <td className="py-1.5 text-right text-stone-500">{fmtDate(m.createdAt.slice(0, 10))}</td>
                     </tr>
                   ))}
                 </tbody>

@@ -8,6 +8,7 @@ import { getBookingPaymentStatus } from '@/lib/utils/booking';
 import { fmtDate, todayISO, daysBetween } from '@/lib/utils/date';
 import type { Booking } from '@/lib/types/booking';
 import type { Payment } from '@/lib/types/payment';
+import type { PaymentLink, OutboundMessage } from '@/lib/types/transactions';
 import type { UserRole } from '@/lib/types/profile';
 import dynamic from 'next/dynamic';
 
@@ -16,12 +17,14 @@ const PaymentModal = dynamic(() => import('@/components/payments/PaymentModal').
 interface Props {
   initialBookings: Booking[];
   initialPayments: Payment[];
+  initialPaymentLinks: PaymentLink[];
+  initialMessages: OutboundMessage[];
   currentUser: { id: string; name: string; role: UserRole };
 }
 
 type SubTab = 'verify' | 'refund' | 'ledger' | 'btc';
 
-export function AccountsClient({ initialBookings, initialPayments, currentUser }: Props) {
+export function AccountsClient({ initialBookings, initialPayments, initialPaymentLinks, initialMessages, currentUser }: Props) {
   const today = todayISO();
   const [tab, setTab] = useState<SubTab>('verify');
   const [isPending, startTransition] = useTransition();
@@ -329,7 +332,16 @@ export function AccountsClient({ initialBookings, initialPayments, currentUser }
         </div>
       )}
 
-      {paymentFor && <PaymentModal booking={paymentFor} currentUser={currentUser} payments={payments.filter(p => p.bookingId === paymentFor.id)} onClose={() => setPaymentFor(null)} />}
+      {paymentFor && (
+        <PaymentModal
+          booking={paymentFor}
+          currentUser={currentUser}
+          payments={payments.filter(p => p.bookingId === paymentFor.id)}
+          paymentLinks={initialPaymentLinks.filter(l => l.bookingId === paymentFor.id)}
+          messages={initialMessages.filter(m => m.bookingId === paymentFor.id)}
+          onClose={() => setPaymentFor(null)}
+        />
+      )}
     </div>
   );
 }
