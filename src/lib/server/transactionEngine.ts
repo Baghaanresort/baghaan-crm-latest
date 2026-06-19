@@ -187,11 +187,18 @@ export async function onPaymentLinkPaid(supabase: SupabaseClient, ev: ParsedEven
   await onPaymentVerified(supabase, bookingId, amountRupees, SYSTEM_ACTOR);
   await syncEnquiryStageFromPayment(supabase, bookingId);
 
-  await sendPaymentReceipt(supabase, toMsgBooking(
-    (await supabase.from('bookings')
+  try {
+    const { data: receiptRow } = await supabase
+      .from('bookings')
       .select('id, guest_name, contact_number, email, confirmation_number, source_enquiry_id')
-      .eq('id', bookingId).single()).data as Record<string, unknown>,
-  ), amountRupees);
+      .eq('id', bookingId)
+      .single();
+    if (receiptRow) {
+      await sendPaymentReceipt(supabase, toMsgBooking(receiptRow as Record<string, unknown>), amountRupees);
+    }
+  } catch (e) {
+    console.error('[onPaymentLinkPaid] receipt send failed (non-fatal)', e);
+  }
 }
 
 export async function onPaymentLinkPartiallyPaid(supabase: SupabaseClient, ev: ParsedEvent): Promise<void> {
@@ -212,23 +219,29 @@ export async function reconcileOpenLinks(supabase: SupabaseClient): Promise<{ ch
 
   let reconciled = 0;
   for (const link of open ?? []) {
-    const rzpId = link['razorpay_link_id'] as string | null;
-    if (!rzpId) continue;
-    const remote = await getPaymentLink(rzpId);
-    if (remote.status === 'paid') {
-      // Synthesize the same shape onPaymentLinkPaid expects. payment id comes from the link's payments[].
-      const payments = (remote as unknown as { payments?: Array<{ payment_id?: string }> }).payments ?? [];
-      const paymentId = payments[0]?.payment_id;
-      if (paymentId) {
-        await onPaymentLinkPaid(supabase, {
-          kind: 'payment_link_paid', linkId: rzpId, referenceId: remote.reference_id,
-          paymentId, amountPaise: remote.amount, amountPaidPaise: remote.amount_paid,
-        });
-        reconciled++;
+    try {
+      const rzpId = link['razorpay_link_id'] as string | null;
+      if (!rzpId) continue;
+      const remote = await getPaymentLink(rzpId);
+      if (remote.status === 'paid') {
+        // Synthesize the same shape onPaymentLinkPaid expects. payment id comes from the link's payments[].
+        const payments = (remote as unknown as { payments?: Array<{ payment_id?: string; status?: string }> }).payments ?? [];
+        const captured = payments.find(p => p.payment_id && p.status === 'captured') ?? payments.find(p => p.payment_id);
+        const paymentId = captured?.payment_id;
+        if (paymentId) {
+          await onPaymentLinkPaid(supabase, {
+            kind: 'payment_link_paid', linkId: rzpId, referenceId: remote.reference_id,
+            paymentId, amountPaise: remote.amount, amountPaidPaise: remote.amount_paid,
+          });
+          reconciled++;
+        }
+      } else if (remote.status === 'cancelled' || remote.status === 'expired') {
+        await supabase.from('payment_links').update({ status: remote.status, updated_at: new Date().toISOString() })
+          .eq('id', link['id']);
       }
-    } else if (remote.status === 'cancelled' || remote.status === 'expired') {
-      await supabase.from('payment_links').update({ status: remote.status, updated_at: new Date().toISOString() })
-        .eq('id', link['id']);
+    } catch (e) {
+      console.error('[reconcileOpenLinks] link failed', link['id'], e);
+      continue;
     }
   }
   return { checked: (open ?? []).length, reconciled };
