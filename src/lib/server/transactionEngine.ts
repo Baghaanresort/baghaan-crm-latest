@@ -5,7 +5,7 @@ import { toPaise, fromPaise } from '@/lib/utils/money';
 import { buildReferenceId, computeAdvance, nextLinkVersion } from '@/lib/server/transaction-helpers';
 import { paymentLinkToDb } from '@/lib/mappers/transactions';
 import { paymentToDb } from '@/lib/mappers/payment';
-import { sendPaymentRequest, type MsgBooking } from '@/lib/server/messaging';
+import { sendPaymentRequest, sendPaymentReceipt, type MsgBooking } from '@/lib/server/messaging';
 import { onPaymentVerified, syncEnquiryStageFromPayment } from '@/lib/server/payment-sync';
 import { ADVANCE_DEFAULT_PCT_KEY, ADVANCE_DEFAULT_PCT_FALLBACK, purposeToPaymentType, type PaymentLinkPurpose } from '@/lib/constants/transactions';
 import type { ParsedEvent } from '@/lib/server/razorpay-events';
@@ -140,6 +140,12 @@ export async function onPaymentLinkPaid(supabase: SupabaseClient, ev: ParsedEven
 
   await onPaymentVerified(supabase, bookingId, amountRupees, SYSTEM_ACTOR);
   await syncEnquiryStageFromPayment(supabase, bookingId);
+
+  await sendPaymentReceipt(supabase, toMsgBooking(
+    (await supabase.from('bookings')
+      .select('id, guest_name, contact_number, email, confirmation_number, source_enquiry_id')
+      .eq('id', bookingId).single()).data as Record<string, unknown>,
+  ), amountRupees);
 }
 
 export async function onPaymentLinkPartiallyPaid(supabase: SupabaseClient, ev: ParsedEvent): Promise<void> {
