@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { ok, err, type ActionResult } from '@/lib/types/result';
-import { requestAdvance, requestBalance } from '@/lib/server/transactionEngine';
+import { requestAdvance, requestBalance, requestCorporateAdvance } from '@/lib/server/transactionEngine';
 
 async function getAuthedUser(supabase: Awaited<ReturnType<typeof createClient>>) {
   const { data: { user } } = await supabase.auth.getUser();
@@ -55,5 +55,21 @@ export async function sendBalanceRequest(
   } catch (e) {
     console.error('[sendBalanceRequest]', e);
     return err(e instanceof Error ? e.message : 'Failed to create balance link');
+  }
+}
+
+export async function sendCorporateAdvanceRequest(bookingId: string): Promise<ActionResult<{ shortUrl: string }>> {
+  if (!bookingId) return err('Booking ID required');
+  const supabase = await createClient();
+  const actor = await getAuthedUser(supabase);
+  if (!actor) return err('Not authenticated');
+  if (!['Sales', 'Sales Admin', 'Admin'].includes(actor.role)) return err('Only Sales and Admin can request payments');
+  try {
+    const res = await requestCorporateAdvance(supabase, bookingId, { actor: actor.name });
+    revalidatePath('/corporate');
+    return ok(res);
+  } catch (e) {
+    console.error('[sendCorporateAdvanceRequest]', e);
+    return err(e instanceof Error ? e.message : 'Failed to create corporate advance link');
   }
 }

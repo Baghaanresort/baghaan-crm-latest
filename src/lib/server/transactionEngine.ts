@@ -87,6 +87,24 @@ export async function requestAdvance(
   });
 }
 
+export async function requestCorporateAdvance(
+  supabase: SupabaseClient, bookingId: string, opts?: { actor?: string },
+): Promise<{ shortUrl: string }> {
+  const { data: row } = await supabase.from('bookings')
+    .select('id, guest_name, contact_number, email, confirmation_number, source_enquiry_id, proforma_invoice, booking_type')
+    .eq('id', bookingId).single();
+  if (!row) throw new Error('Booking not found');
+  if (row['booking_type'] !== 'corporate') throw new Error('Not a corporate booking');
+
+  const pi = row['proforma_invoice'] as { advanceRequired?: number } | null;
+  const advance = pi ? Number(pi.advanceRequired ?? 0) : 0;
+  if (!(advance > 0)) throw new Error('Generate the proforma invoice (with an advance) first.');
+
+  return createAndSendLink(supabase, {
+    row, purpose: 'corporate_advance', amountRupees: advance, actor: opts?.actor ?? 'system',
+  });
+}
+
 // Outstanding = total (or final bill) − verified payments, in rupees.
 export async function requestBalance(
   supabase: SupabaseClient, bookingId: string, opts?: { amountRupees?: number; actor?: string },

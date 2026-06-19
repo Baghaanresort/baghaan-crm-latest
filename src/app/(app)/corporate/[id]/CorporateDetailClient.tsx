@@ -12,6 +12,7 @@ import {
   sendCostSheet, markCostSheetAccepted, generateProformaInvoice,
   checkInCorporate, completeCorporate, getCorporateActivity,
 } from '@/lib/actions/corporate';
+import { sendCorporateAdvanceRequest } from '@/lib/actions/transactions';
 import { CORPORATE_STAGES, CORPORATE_STAGE_ORDER, corporateStageStep } from '@/lib/constants/corporate';
 import { getBookingPaymentStatus } from '@/lib/utils/booking';
 import { fmtDate, fmtDateTime } from '@/lib/utils/date';
@@ -56,6 +57,8 @@ export function CorporateDetailClient({ booking, payments, users, currentUser }:
   const canEdit = isSales || isFO || isAdmin;
   const canGenPI = isSales || isAdmin;
   const canPay = isSales || isFO || isAdmin;
+  // Matches the server gate in sendCorporateAdvanceRequest (Sales / Sales Admin / Admin).
+  const canSendLink = isSales || role === 'Sales Admin' || isAdmin;
   const lost = booking.status === 'cancelled';
 
   const stage = (booking.corporateStage ?? 'inquiry') as CorporateStage;
@@ -100,14 +103,18 @@ export function CorporateDetailClient({ booking, payments, users, currentUser }:
       case 'cost_sheet_draft': return { desc: 'Cost sheet drafted. Send the quote to the client.', btn: canEdit ? { label: 'Send Quote', on: () => run(() => sendCostSheet(booking.id), 'Quote sent') } : null, alt: canEdit ? { label: 'Edit Cost Sheet', on: open(setShowCostSheet) } : null };
       case 'cost_sheet_sent': return { desc: 'Quote sent. Mark it accepted once the client agrees.', btn: canEdit ? { label: 'Mark Quote Accepted', on: () => run(() => markCostSheetAccepted(booking.id), 'Quote accepted') } : null, alt: canEdit ? { label: 'Revise Quote', on: open(setShowCostSheet) } : null };
       case 'cost_sheet_accepted': return { desc: 'Quote accepted. Generate the Proforma Invoice to request the advance.', btn: canGenPI ? { label: 'Generate Proforma Invoice', on: () => run(() => generateProformaInvoice(booking.id), 'Proforma invoice generated') } : null };
-      case 'pi_generated': return { desc: `Advance of ${inr(ps.advanceRequired)} required. ${ps.advanceShortfall > 0 ? `${inr(ps.advanceShortfall)} still outstanding.` : 'Advance received — awaiting verification.'}`, btn: canPay ? { label: 'Record Advance Payment', on: open(setShowPayment) } : null };
+      case 'pi_generated': return {
+        desc: `Advance of ${inr(ps.advanceRequired)} required. ${ps.advanceShortfall > 0 ? `${inr(ps.advanceShortfall)} still outstanding.` : 'Advance received — awaiting verification.'}`,
+        btn: canSendLink ? { label: 'Send advance link', on: () => run(() => sendCorporateAdvanceRequest(booking.id), 'Advance payment link sent') } : (canPay ? { label: 'Record Advance Payment', on: open(setShowPayment) } : null),
+        alt: canSendLink && canPay ? { label: 'Record Advance Payment', on: open(setShowPayment) } : null,
+      };
       case 'advance_paid': return { desc: 'Advance paid — confirming the booking.', btn: canPay ? { label: 'Record Payment', on: open(setShowPayment) } : null };
       case 'confirmed': return { desc: 'Booking confirmed and rooms blocked. Check in the guests on arrival.', btn: canEdit ? { label: 'Check-In Guests', on: () => run(() => checkInCorporate(booking.id), 'Guests checked in') } : null };
       case 'checked_in': return { desc: 'Guests checked in. Settle the final bill, then complete the booking.', btn: canEdit ? { label: 'Complete Booking', on: () => run(() => completeCorporate(booking.id), 'Booking completed') } : null };
       case 'completed': return { desc: 'This deal is closed. 🎉', btn: null };
       default: return { desc: '', btn: null };
     }
-  }, [stage, booking.id, ps, canEdit, canGenPI, canPay]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [stage, booking.id, ps, canEdit, canGenPI, canPay, canSendLink]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const balanceTone = ps.billAmount > 0 && ps.balance <= 0 ? 'text-emerald-700' : ps.advanceShortfall > 0 ? 'text-red-600' : 'text-amber-600';
   const curStep = corporateStageStep(stage);
