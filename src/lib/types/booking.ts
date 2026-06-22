@@ -19,6 +19,13 @@ export interface GuestCount {
   triple: number;
 }
 
+export interface AddOn {
+  name: string;
+  pricePerUnit: number;
+  units: number;
+  total: number;
+}
+
 export interface LineItem {
   day: string;
   dayLabel: string;
@@ -84,6 +91,7 @@ export interface Booking {
   rooms: string[];
   rateBreakdown: string;
   totalAmount: number;
+  addOns: AddOn[];
   advancePaid: number;
   inclusions: string;
   remarks: string;

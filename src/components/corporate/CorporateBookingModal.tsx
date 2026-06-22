@@ -10,6 +10,7 @@ import { datesInRange, isoDate, daysBetween, todayISO, addDays } from '@/lib/uti
 import { isValidPhone, PHONE_ERROR } from '@/lib/validations/phone';
 import { DateInput } from '@/components/ui/DateInput';
 import { NumberInput } from '@/components/ui/NumberInput';
+import { AddOnsEditor } from '@/components/bookings/AddOnsEditor';
 import type { Booking } from '@/lib/types/booking';
 
 interface Props {
@@ -38,6 +39,7 @@ export function CorporateBookingModal({ booking, users, currentUser, existingBoo
     rooms: booking?.rooms ?? [] as string[],
     guestCount: booking?.guestCount ?? { single: 0, double: 0, triple: 0 },
     remarks: booking?.remarks ?? '',
+    addOns: booking?.addOns ?? ([] as Booking['addOns']),
     createdBy: booking?.createdBy ?? currentUser.name,
   }));
 
@@ -68,6 +70,7 @@ export function CorporateBookingModal({ booking, users, currentUser, existingBoo
     if (!form.contactNumber.trim()) { toast.error('Contact number is required'); return; }
     if (!isValidPhone(form.contactNumber)) { toast.error(PHONE_ERROR); return; }
     if (nights < 1) { toast.error('Departure must be after arrival'); return; }
+    const cleanAddOns = form.addOns.filter(a => a.name.trim() !== '' || a.total > 0);
 
     startTransition(async () => {
       if (isEdit && booking) {
@@ -85,11 +88,12 @@ export function CorporateBookingModal({ booking, users, currentUser, existingBoo
           guestCount: form.guestCount,
           remarks: form.remarks,
           createdBy: form.createdBy,
+          addOns: cleanAddOns,
 });
         if (!result.success) { toast.error(result.error); return; }
         toast.success('Corporate booking updated');
       } else {
-        const result = await createCorporateBooking({ ...form, nights });
+        const result = await createCorporateBooking({ ...form, nights, addOns: cleanAddOns });
         if (!result.success) { toast.error(result.error); return; }
         toast.success(`Corporate booking created: ${result.data.confirmationNumber}`);
       }
@@ -153,6 +157,9 @@ export function CorporateBookingModal({ booking, users, currentUser, existingBoo
             <div className="text-sm text-stone-700 mt-2 bg-stone-100 px-3 py-2">Selected: <strong>{form.rooms.length}</strong> rooms</div>
           </div>
           <div><label className="text-xs text-stone-600 uppercase tracking-wider block mb-1">Remarks</label><textarea value={form.remarks} onChange={e => setForm(f => ({ ...f, remarks: e.target.value }))} rows={2} className="w-full px-3 py-2 border border-stone-300 text-sm outline-none bg-white" /></div>
+          <div className="border border-stone-200 bg-white p-3">
+            <AddOnsEditor value={form.addOns} onChange={v => setForm(f => ({ ...f, addOns: v }))} />
+          </div>
           <div><label className="text-xs text-stone-600 uppercase tracking-wider block mb-1">Sales Agent</label>
             <select value={form.createdBy} onChange={e => setForm(f => ({ ...f, createdBy: e.target.value }))} className="w-full px-3 py-2 border border-stone-300 text-sm bg-white outline-none">
               {allAgents.map(a => <option key={a} value={a}>{a}</option>)}

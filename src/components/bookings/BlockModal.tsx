@@ -10,6 +10,8 @@ import { datesInRange, isoDate, daysBetween, todayISO, addDays, fmtDate } from '
 import { isValidPhone, PHONE_ERROR } from '@/lib/validations/phone';
 import { DateInput } from '@/components/ui/DateInput';
 import { NumberInput } from '@/components/ui/NumberInput';
+import { AddOnsEditor } from '@/components/bookings/AddOnsEditor';
+import { addOnsTotal } from '@/lib/utils/booking';
 import type { Booking } from '@/lib/types/booking';
 
 interface Props {
@@ -54,8 +56,10 @@ export function BlockModal({ currentUser, existingBookings, booking, enquiry, on
       adults: booking?.adults ?? 2,
       children: booking?.children ?? 0,
       rooms: booking?.rooms ?? ([] as string[]),
-      // Blank by default (not 0): an empty quote ≠ a quote of zero.
-      quotedAmount: booking?.totalAmount ? String(booking.totalAmount) : '',
+      // Blank by default (not 0): an empty quote ≠ a quote of zero. Stored total is the
+      // grand total (package + add-ons); show only the package portion here.
+      quotedAmount: booking?.totalAmount ? String(booking.totalAmount - addOnsTotal(booking.addOns ?? [])) : '',
+      addOns: booking?.addOns ?? ([] as Booking['addOns']),
       notes: booking?.remarks ?? '',
       holdExpiresAt: booking ? toLocalInput(booking.holdExpiresAt) : localExpiry,
     };
@@ -63,6 +67,11 @@ export function BlockModal({ currentUser, existingBookings, booking, enquiry, on
 
   // Nights is derived from the dates — compute in render, no effect/synced state.
   const nights = daysBetween(form.arrival, form.departure);
+
+  // Add-ons roll into the quoted package amount to form the grand total that is saved.
+  const blockQuoted = form.quotedAmount.trim() === '' ? 0 : (Number(form.quotedAmount) || 0);
+  const blockAddOnsSum = addOnsTotal(form.addOns);
+  const blockGrand = blockQuoted + blockAddOnsSum;
 
   const update = <K extends keyof typeof form>(k: K, v: typeof form[K]) =>
     setForm(f => ({ ...f, [k]: v }));
@@ -102,6 +111,8 @@ export function BlockModal({ currentUser, existingBookings, booking, enquiry, on
     if (nights < 1) { toast.error('Departure must be after arrival'); return; }
     const quoted = form.quotedAmount.trim() === '' ? 0 : Number(form.quotedAmount);
     if (Number.isNaN(quoted) || quoted < 0) { toast.error('Quoted amount must be a positive number'); return; }
+    const cleanAddOns = form.addOns.filter(a => a.name.trim() !== '' || a.total > 0);
+    const grand = quoted + addOnsTotal(cleanAddOns);
 
     startTransition(async () => {
       if (isEdit && booking) {
@@ -117,7 +128,8 @@ export function BlockModal({ currentUser, existingBookings, booking, enquiry, on
           adults: form.adults,
           children: form.children,
           rooms: form.rooms,
-          totalAmount: quoted,
+          totalAmount: grand,
+          addOns: cleanAddOns,
           remarks: form.notes,
           holdExpiresAt: form.holdExpiresAt || null,
           status: 'hold',
@@ -128,13 +140,13 @@ export function BlockModal({ currentUser, existingBookings, booking, enquiry, on
         const result = await blockEnquiryRooms(enquiry.id, {
           arrival: form.arrival, departure: form.departure, nights: nights,
           adults: form.adults, children: form.children, rooms: form.rooms,
-          quotedAmount: quoted, notes: form.notes, holdExpiresAt: form.holdExpiresAt || null,
+          quotedAmount: grand, addOns: cleanAddOns, notes: form.notes, holdExpiresAt: form.holdExpiresAt || null,
         });
         if (!result.success) { toast.error(result.error); return; }
         toast.success(`Rooms blocked: ${result.data.confirmationNumber}`);
         onBlocked?.();
       } else {
-        const result = await createBlockedRoom({ ...form, nights, quotedAmount: quoted, createdBy: currentUser.name });
+        const result = await createBlockedRoom({ ...form, nights, quotedAmount: grand, addOns: cleanAddOns, createdBy: currentUser.name });
         if (!result.success) { toast.error(result.error); return; }
         toast.success(`Rooms blocked: ${result.data.confirmationNumber}`);
       }
@@ -215,6 +227,16 @@ export function BlockModal({ currentUser, existingBookings, booking, enquiry, on
           <div className="grid grid-cols-2 gap-4">
             <div><label className="text-xs text-stone-600 uppercase tracking-wider block mb-1">Quoted Amount (₹) — optional</label><input type="number" min="0" value={form.quotedAmount} onChange={e => update('quotedAmount', e.target.value)} placeholder="—" className="w-full px-3 py-2 border border-stone-300 text-sm outline-none bg-white" /></div>
             <div><label className="text-xs text-stone-600 uppercase tracking-wider block mb-1">Quick Note</label><input value={form.notes} onChange={e => update('notes', e.target.value)} placeholder="e.g. 'Will pay by Friday'" className="w-full px-3 py-2 border border-stone-300 text-sm outline-none bg-white" /></div>
+          </div>
+
+          <div className="border border-stone-200 bg-white p-3">
+            <AddOnsEditor value={form.addOns} onChange={v => update('addOns', v)} />
+            {blockAddOnsSum > 0 && (
+              <div className="text-xs text-right text-stone-600 mt-2">
+                Quote ₹{blockQuoted.toLocaleString('en-IN')} + Add-ons ₹{blockAddOnsSum.toLocaleString('en-IN')} ={' '}
+                <strong className="text-stone-900">₹{blockGrand.toLocaleString('en-IN')}</strong>
+              </div>
+            )}
           </div>
 
           {!isEdit && (

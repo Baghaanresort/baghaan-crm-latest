@@ -6,7 +6,7 @@ import { ok, err, type ActionResult } from '@/lib/types/result';
 import { logCorporateActivity } from '@/lib/server/corporateEngine';
 import { CORPORATE_STAGES, corporateStageStep } from '@/lib/constants/corporate';
 import { isValidPhone, normalizePhone, PHONE_ERROR } from '@/lib/validations/phone';
-import type { CostSheet, LineItem, ProformaInvoice, CorporateStage } from '@/lib/types/booking';
+import type { AddOn, CostSheet, LineItem, ProformaInvoice, CorporateStage } from '@/lib/types/booking';
 import type { CorporateActivityEntry } from '@/lib/types/corporate-activity';
 
 async function getAuthedUser(supabase: Awaited<ReturnType<typeof createClient>>) {
@@ -255,6 +255,7 @@ export async function createCorporateBooking(input: {
   rooms: string[];
   guestCount: { single: number; double: number; triple: number };
   remarks: string;
+  addOns?: AddOn[];
   createdBy: string;
 }): Promise<ActionResult<{ id: string; confirmationNumber: string }>> {
   const supabase = await createClient();
@@ -294,6 +295,7 @@ export async function createCorporateBooking(input: {
     rooms: input.rooms,
     rate_breakdown: '',
     total_amount: 0,
+    add_ons: input.addOns ?? [],
     advance_paid: 0,
     inclusions: '',
     remarks: input.remarks || '',

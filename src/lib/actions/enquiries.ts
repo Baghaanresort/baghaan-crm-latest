@@ -313,6 +313,7 @@ export async function blockEnquiryRooms(
     children: parsed.data.children,
     rooms: parsed.data.rooms,
     quotedAmount: parsed.data.quotedAmount ?? 0,
+    addOns: parsed.data.addOns ?? [],
     notes: parsed.data.notes ?? '',
     createdBy: actor.name,
     holdExpiresAt: parsed.data.holdExpiresAt ?? null,

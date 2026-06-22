@@ -11,6 +11,8 @@ import { datesInRange, isoDate, daysBetween, todayISO, addDays } from '@/lib/uti
 import { isValidPhone, PHONE_ERROR } from '@/lib/validations/phone';
 import { DateInput } from '@/components/ui/DateInput';
 import { NumberInput } from '@/components/ui/NumberInput';
+import { AddOnsEditor } from '@/components/bookings/AddOnsEditor';
+import { addOnsTotal } from '@/lib/utils/booking';
 import type { Booking } from '@/lib/types/booking';
 
 interface Props {
@@ -46,7 +48,10 @@ export function BookingModal({ booking, users, currentUser, existingBookings, pr
       children: booking?.children ?? 0,
       rooms: booking?.rooms ?? ([] as string[]),
       rateBreakdown: booking?.rateBreakdown ?? '',
-      totalAmount: booking?.totalAmount ?? 0,
+      // Stored totalAmount is the grand total (package + add-ons). The field below edits
+      // the package portion, so back the add-ons out on load; they're re-added on save.
+      totalAmount: (booking?.totalAmount ?? 0) - addOnsTotal(booking?.addOns ?? []),
+      addOns: (booking?.addOns ?? []) as Booking['addOns'],
       advancePaid: booking?.advancePaid ?? 0,
       inclusions: booking?.inclusions ?? '',
       remarks: booking?.remarks ?? prefill?.remarks ?? '',
@@ -105,6 +110,10 @@ export function BookingModal({ booking, users, currentUser, existingBookings, pr
   const displayTotal = rateTouched ? form.totalAmount : autoTotal;
   const displayBreakdown = rateTouched ? form.rateBreakdown : autoBreakdown;
 
+  // Add-ons roll into the package total to form the grand total that gets saved.
+  const addOnsSum = addOnsTotal(form.addOns);
+  const grandTotal = displayTotal + addOnsSum;
+
   // First manual edit: commit the current auto values into state, then apply the edit
   // (so switching a custom breakdown doesn't wipe the total, and vice-versa).
   const enterManual = () => {
@@ -125,7 +134,14 @@ export function BookingModal({ booking, users, currentUser, existingBookings, pr
     if (nights < 1) { toast.error('Departure must be after arrival'); return; }
 
     // nights is derived; totalAmount/rateBreakdown follow the auto calc until overridden.
-    const payload = { ...form, nights, totalAmount: displayTotal, rateBreakdown: displayBreakdown, bookingType: 'regular' as const };
+    const payload = {
+      ...form,
+      nights,
+      totalAmount: grandTotal,
+      rateBreakdown: displayBreakdown,
+      addOns: form.addOns.filter(a => a.name.trim() !== '' || a.total > 0),
+      bookingType: 'regular' as const,
+    };
 
     startTransition(async () => {
       if (isEdit) {
@@ -278,6 +294,15 @@ export function BookingModal({ booking, users, currentUser, existingBookings, pr
                 <>Auto-calculated from selected rooms × nights — edit the amount to override.</>
               )}
             </p>
+            <div className="mt-4 pt-4 border-t border-stone-200">
+              <AddOnsEditor value={form.addOns} onChange={v => update('addOns', v)} />
+            </div>
+            {addOnsSum > 0 && (
+              <div className="text-xs text-right text-stone-600 mt-2">
+                Package ₹{displayTotal.toLocaleString('en-IN')} + Add-ons ₹{addOnsSum.toLocaleString('en-IN')} ={' '}
+                <strong className="text-stone-900">Grand total ₹{grandTotal.toLocaleString('en-IN')}</strong>
+              </div>
+            )}
           </Section>
 
           {/* Inclusions & Notes */}

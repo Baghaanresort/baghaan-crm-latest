@@ -1,6 +1,13 @@
 import { z } from 'zod';
 import { phoneSchema } from './phone';
 
+export const AddOnSchema = z.object({
+  name: z.string().default(''),
+  pricePerUnit: z.number().min(0).default(0),
+  units: z.number().min(0).default(0),
+  total: z.number().min(0).default(0),
+});
+
 export const BookingSchema = z
   .object({
     guestName: z.string().min(1, 'Guest name is required'),
@@ -15,6 +22,7 @@ export const BookingSchema = z
     children: z.number().int().min(0),
     rooms: z.array(z.string()).min(1, 'Select at least one room'),
     totalAmount: z.number().min(0),
+    addOns: z.array(AddOnSchema).optional().default([]),
     advancePaid: z.number().min(0),
     rateBreakdown: z.string().optional().default(''),
     inclusions: z.string().optional().default(''),
@@ -64,6 +72,7 @@ export const BlockRoomSchema = z
     children: z.number().int().min(0),
     rooms: z.array(z.string()).min(1, 'Select at least one room to block'),
     quotedAmount: z.number().min(0).optional().default(0),
+    addOns: z.array(AddOnSchema).optional().default([]),
     notes: z.string().optional().default(''),
     createdBy: z.string().min(1),
     holdExpiresAt: z.string().nullable().optional(),
