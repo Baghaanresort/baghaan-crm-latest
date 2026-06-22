@@ -35,6 +35,18 @@ async function logOutbound(
   if (error) console.error('[logOutbound]', error);
 }
 
+// Is an own-delivery provider actually configured? If not, we skip the channel silently
+// (no "failed" noise) — useful when Razorpay's own notify is doing the delivery instead.
+function whatsAppConfigured(): boolean {
+  const p = process.env.WHATSAPP_PROVIDER;
+  if (p === 'gupshup') return !!process.env.GUPSHUP_API_KEY;
+  if (p === 'twilio') return !!process.env.TWILIO_ACCOUNT_SID && !!process.env.TWILIO_AUTH_TOKEN;
+  return false;
+}
+function emailConfigured(): boolean {
+  return !!process.env.RESEND_API_KEY;
+}
+
 // Generic: try a channel, log the outcome, swallow errors (delivery must not break the caller).
 async function deliver(
   supabase: SupabaseClient, b: MsgBooking, channel: OutboundChannel, purpose: OutboundPurpose,
@@ -43,12 +55,12 @@ async function deliver(
 ): Promise<void> {
   try {
     if (channel === 'whatsapp') {
-      if (!template || !b.contactNumber) return;
+      if (!template || !b.contactNumber || !whatsAppConfigured()) return;
       const r = await sendWhatsAppTemplate(b.contactNumber, template, params, mediaUrl);
       await logOutbound(supabase, { bookingId: b.id, enquiryId: b.enquiryId ?? null, channel, purpose,
         destination: b.contactNumber, template, provider: r.provider, providerMessageId: r.providerMessageId, status: 'sent' });
     } else {
-      if (!b.email) return;
+      if (!b.email || !emailConfigured()) return;
       const r = await sendEmail(b.email, emailSubject, emailHtml);
       await logOutbound(supabase, { bookingId: b.id, enquiryId: b.enquiryId ?? null, channel, purpose,
         destination: b.email, provider: r.provider, providerMessageId: r.providerMessageId, status: 'sent' });
