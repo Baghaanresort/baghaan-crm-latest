@@ -147,11 +147,7 @@ export function PaymentModal({ booking, currentUser, payments, paymentLinks = []
             </div>
             <div>
               <label className="text-xs text-stone-600 uppercase tracking-wider block mb-1">Amount (₹) *</label>
-              <div className="flex gap-2">
-                <input type="number" value={form.amount} onChange={e => update('amount', e.target.value)} placeholder="0" className="flex-1 px-3 py-2 border border-stone-300 text-sm outline-none focus:border-emerald-700 bg-white" />
-                <button type="button" onClick={() => update('amount', String(Math.round(balance / 2)))} className="text-xs px-2 border border-stone-300 text-stone-600 hover:bg-stone-100 whitespace-nowrap">50%</button>
-                <button type="button" onClick={() => update('amount', String(Math.max(0, balance)))} className="text-xs px-2 border border-stone-300 text-stone-600 hover:bg-stone-100">Full</button>
-              </div>
+              <input type="number" value={form.amount} onChange={e => update('amount', e.target.value)} placeholder="0" className="w-full px-3 py-2 border border-stone-300 text-sm outline-none focus:border-emerald-700 bg-white" />
             </div>
           </div>
 

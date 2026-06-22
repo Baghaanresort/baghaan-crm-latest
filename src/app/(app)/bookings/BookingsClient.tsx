@@ -340,6 +340,8 @@ export function BookingsClient({ initialBookings, initialPayments, initialReques
               {filtered.map(b => {
                 const ps = pStats(b);
                 const eff = effStatus(b);
+                // +PAY / BILL disappear once any payment (verified or pending) has been recorded.
+                const paymentRecorded = ps.totalPaid > 0 || ps.totalUnverified > 0;
                 const timeStatus = b.departure <= today ? 'past' : b.arrival <= today ? 'inhouse' : 'upcoming';
 
                 let statusColor = 'bg-stone-100 text-stone-600';
@@ -414,16 +416,16 @@ export function BookingsClient({ initialBookings, initialPayments, initialReques
                     <td className="p-3 text-right">
                       <div className="flex gap-1 justify-end items-center">
                         {(isSales || isFO || isAdmin) && (
-                          <>
-                            <button onClick={() => b.status === 'hold' ? setEditHold(b) : setEditBooking(b)} title={b.status === 'hold' ? 'Edit hold' : 'Edit reservation'} className="p-1.5 hover:bg-stone-100 text-stone-600 rounded transition-colors">
-                              <Edit2 size={13} />
-                            </button>
-                            <button onClick={() => setPaymentFor(b)} title="Add payment" className="text-xs bg-emerald-700 text-white px-2 py-1 hover:bg-emerald-800 transition-colors">
-                              +PAY
-                            </button>
-                          </>
+                          <button onClick={() => b.status === 'hold' ? setEditHold(b) : setEditBooking(b)} title={b.status === 'hold' ? 'Edit hold' : 'Edit reservation'} className="p-1.5 hover:bg-stone-100 text-stone-600 rounded transition-colors">
+                            <Edit2 size={13} />
+                          </button>
                         )}
-                        {(isFO || isAdmin) && (
+                        {(isSales || isFO || isAdmin) && !paymentRecorded && (
+                          <button onClick={() => setPaymentFor(b)} title="Add payment" className="text-xs bg-emerald-700 text-white px-2 py-1 hover:bg-emerald-800 transition-colors">
+                            +PAY
+                          </button>
+                        )}
+                        {(isFO || isAdmin) && !paymentRecorded && (
                           <button onClick={() => setFinalBillFor(b)} title="Final bill" className="text-xs bg-blue-700 text-white px-2 py-1 hover:bg-blue-800 transition-colors">
                             BILL
                           </button>

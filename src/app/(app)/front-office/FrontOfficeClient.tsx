@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo, useTransition } from 'react';
-import { LogIn, LogOut } from 'lucide-react';
+import { LogIn, LogOut, Check } from 'lucide-react';
 import { toast } from 'sonner';
 import { checkInBooking, checkOutBooking } from '@/lib/actions/bookings';
 import { fmtDate, todayISO } from '@/lib/utils/date';
@@ -120,6 +120,9 @@ export function FrontOfficeClient({ initialBookings, initialPayments, currentUse
             <tbody>
               {activeList.items.map(b => {
                 const ps = pStats(b);
+                // 3-step checkout gate: bill must be added → then payment → then checkout.
+                const hasBill = !!b.finalBill;
+                const hasPayment = ps.totalPaid > 0 || ps.totalUnverified > 0;
                 return (
                   <tr key={b.id} className="border-t border-stone-100 hover:bg-stone-50">
                     <td className="p-3">
@@ -146,14 +149,20 @@ export function FrontOfficeClient({ initialBookings, initialPayments, currentUse
                             </button>
                           )}
                           {b.status === 'checked_in' && (
-                            <button onClick={() => handleCheckOut(b.id)} disabled={isPending} className="inline-flex items-center gap-1 text-xs border border-stone-300 text-stone-700 px-2.5 py-1 hover:bg-stone-100 disabled:opacity-50">
+                            <button onClick={() => handleCheckOut(b.id)} disabled={isPending || !hasPayment} title={hasPayment ? 'Check out guest' : 'Record a payment before checking out'} className="inline-flex items-center gap-1 text-xs border border-stone-300 text-stone-700 px-2.5 py-1 hover:bg-stone-100 disabled:opacity-50 disabled:cursor-not-allowed">
                               <LogOut size={12} /> CHECK OUT
                             </button>
                           )}
                           {atCheckout(b) && (
                             <>
-                              <button onClick={() => setPaymentFor(b)} className="text-xs bg-emerald-700 text-white px-2.5 py-1 hover:bg-emerald-800">+ PAY</button>
-                              <button onClick={() => setFinalBillFor(b)} className="text-xs bg-blue-700 text-white px-2.5 py-1 hover:bg-blue-800">BILL</button>
+                              <button onClick={() => setPaymentFor(b)} disabled={!hasBill} title={hasBill ? 'Record payment' : 'Add the bill before recording payment'} className="text-xs bg-emerald-700 text-white px-2.5 py-1 hover:bg-emerald-800 disabled:opacity-50 disabled:cursor-not-allowed">+ PAY</button>
+                              {hasBill ? (
+                                <button onClick={() => setFinalBillFor(b)} title="Bill added — view or edit" className="inline-flex items-center gap-1 text-xs border border-emerald-600 text-emerald-700 px-2.5 py-1 hover:bg-emerald-50">
+                                  <Check size={12} /> ADDED
+                                </button>
+                              ) : (
+                                <button onClick={() => setFinalBillFor(b)} className="text-xs bg-blue-700 text-white px-2.5 py-1 hover:bg-blue-800">BILL</button>
+                              )}
                             </>
                           )}
                         </div>
