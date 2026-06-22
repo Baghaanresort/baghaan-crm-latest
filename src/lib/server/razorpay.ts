@@ -60,16 +60,18 @@ export async function createPaymentLink(
   args: CreatePaymentLinkArgs,
 ): Promise<{ id: string; shortUrl: string; status: string }> {
   // By default let Razorpay deliver the link by SMS + email to the customer (zero setup).
-  // Set RAZORPAY_NOTIFY=false once your own WhatsApp/email delivery is configured, to
-  // avoid double-notifying.
-  const notify = process.env.RAZORPAY_NOTIFY !== 'false';
+  // Enable each channel ONLY when we actually have that value, so a phone-only booking
+  // sends an SMS and skips email rather than tripping Razorpay's "email is required for
+  // email notification" validation (which would fail the whole link creation).
+  // Set RAZORPAY_NOTIFY=false once your own WhatsApp/email delivery is configured.
+  const notifyOn = process.env.RAZORPAY_NOTIFY !== 'false';
   const body: Record<string, unknown> = {
     amount: args.amountPaise,
     currency: 'INR',
     reference_id: args.referenceId,
     description: args.description,
     customer: args.customer,
-    notify: { sms: notify, email: notify },
+    notify: { sms: notifyOn && !!args.customer.contact, email: notifyOn && !!args.customer.email },
     reminder_enable: true,
     notes: args.notes ?? {},
   };
