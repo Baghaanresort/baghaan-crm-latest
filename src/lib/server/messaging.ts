@@ -4,9 +4,11 @@ import { sendWhatsAppTemplate } from '@/lib/server/whatsapp';
 import { sendEmail } from '@/lib/server/email';
 import { outboundMessageToDb } from '@/lib/mappers/transactions';
 import { formatINR } from '@/lib/utils/money';
+import { voucherEmail, paymentRequestEmail, paymentReceiptEmail, refundNoticeEmail } from '@/lib/server/email-templates';
 import type { OutboundChannel, OutboundPurpose, OutboundStatus } from '@/lib/constants/transactions';
 
-// Minimal booking shape the messaging layer needs (avoids importing the full Booking type churn).
+// Booking shape the messaging layer needs. The core fields are always set; the optional
+// detail fields enrich the report-style email templates when the caller has them.
 export interface MsgBooking {
   id: string;
   guestName: string;
@@ -14,6 +16,16 @@ export interface MsgBooking {
   email: string;
   confirmationNumber: string;
   enquiryId?: string | null;
+  arrival?: string | undefined;
+  departure?: string | undefined;
+  nights?: number | undefined;
+  rooms?: string[] | undefined;
+  adults?: number | undefined;
+  children?: number | undefined;
+  companyName?: string | undefined;
+  totalAmount?: number | undefined;
+  paid?: number | undefined;
+  balance?: number | undefined;
 }
 
 async function logOutbound(
@@ -76,37 +88,35 @@ export async function sendPaymentRequest(
   supabase: SupabaseClient, b: MsgBooking, amountRupees: number, shortUrl: string,
 ): Promise<void> {
   const amt = formatINR(amountRupees);
+  const e = paymentRequestEmail(b, amountRupees, shortUrl);
   await deliver(supabase, b, 'whatsapp', 'payment_request',
     process.env.WHATSAPP_TEMPLATE_PAYMENT_REQUEST, [b.guestName, b.confirmationNumber, amt, shortUrl], undefined,
-    `Payment request — ${b.confirmationNumber}`,
-    `<p>Dear ${b.guestName},</p><p>To confirm your booking <b>${b.confirmationNumber}</b>, please pay the advance of <b>${amt}</b>:</p><p><a href="${shortUrl}">${shortUrl}</a></p>`);
-  await deliver(supabase, b, 'email', 'payment_request', undefined, [], undefined,
-    `Payment request — ${b.confirmationNumber}`,
-    `<p>Dear ${b.guestName},</p><p>To confirm your booking <b>${b.confirmationNumber}</b>, please pay the advance of <b>${amt}</b>:</p><p><a href="${shortUrl}">${shortUrl}</a></p>`);
+    e.subject, e.html);
+  await deliver(supabase, b, 'email', 'payment_request', undefined, [], undefined, e.subject, e.html);
 }
 
 export async function sendVoucher(supabase: SupabaseClient, b: MsgBooking, voucherUrl: string): Promise<void> {
+  const e = voucherEmail(b, voucherUrl);
   await deliver(supabase, b, 'whatsapp', 'voucher',
     process.env.WHATSAPP_TEMPLATE_VOUCHER, [b.guestName, b.confirmationNumber, voucherUrl], voucherUrl,
-    `Your Baghaan booking voucher — ${b.confirmationNumber}`,
-    `<p>Dear ${b.guestName},</p><p>Your booking <b>${b.confirmationNumber}</b> is confirmed. View your voucher:</p><p><a href="${voucherUrl}">${voucherUrl}</a></p>`);
-  await deliver(supabase, b, 'email', 'voucher', undefined, [], undefined,
-    `Your Baghaan booking voucher — ${b.confirmationNumber}`,
-    `<p>Dear ${b.guestName},</p><p>Your booking <b>${b.confirmationNumber}</b> is confirmed. View your voucher:</p><p><a href="${voucherUrl}">${voucherUrl}</a></p>`);
+    e.subject, e.html);
+  await deliver(supabase, b, 'email', 'voucher', undefined, [], undefined, e.subject, e.html);
 }
 
 export async function sendPaymentReceipt(supabase: SupabaseClient, b: MsgBooking, amountRupees: number): Promise<void> {
   const amt = formatINR(amountRupees);
+  const e = paymentReceiptEmail(b, amountRupees);
   await deliver(supabase, b, 'whatsapp', 'payment_receipt',
     process.env.WHATSAPP_TEMPLATE_RECEIPT, [b.guestName, b.confirmationNumber, amt], undefined,
-    `Payment received — ${b.confirmationNumber}`,
-    `<p>Dear ${b.guestName},</p><p>We have received your payment of <b>${amt}</b> for ${b.confirmationNumber}. Thank you.</p>`);
+    e.subject, e.html);
+  await deliver(supabase, b, 'email', 'payment_receipt', undefined, [], undefined, e.subject, e.html);
 }
 
 export async function sendRefundNotice(supabase: SupabaseClient, b: MsgBooking, amountRupees: number): Promise<void> {
   const amt = formatINR(amountRupees);
+  const e = refundNoticeEmail(b, amountRupees);
   await deliver(supabase, b, 'whatsapp', 'refund_notice',
     process.env.WHATSAPP_TEMPLATE_REFUND, [b.guestName, b.confirmationNumber, amt], undefined,
-    `Refund processed — ${b.confirmationNumber}`,
-    `<p>Dear ${b.guestName},</p><p>Your refund of <b>${amt}</b> for ${b.confirmationNumber} has been processed.</p>`);
+    e.subject, e.html);
+  await deliver(supabase, b, 'email', 'refund_notice', undefined, [], undefined, e.subject, e.html);
 }

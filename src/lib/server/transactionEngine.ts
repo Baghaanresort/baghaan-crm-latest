@@ -18,6 +18,7 @@ async function advancePct(supabase: SupabaseClient): Promise<number> {
 }
 
 function toMsgBooking(row: Record<string, unknown>): MsgBooking {
+  const num = (v: unknown): number | undefined => (v === null || v === undefined ? undefined : Number(v));
   return {
     id: row['id'] as string,
     guestName: (row['guest_name'] as string) || 'Guest',
@@ -25,6 +26,15 @@ function toMsgBooking(row: Record<string, unknown>): MsgBooking {
     email: (row['email'] as string) || '',
     confirmationNumber: (row['confirmation_number'] as string) || '',
     enquiryId: (row['source_enquiry_id'] as string | null) ?? null,
+    // Optional detail fields (present when the caller's select includes them) — enrich the email.
+    arrival: (row['arrival'] as string | undefined) || undefined,
+    departure: (row['departure'] as string | undefined) || undefined,
+    nights: num(row['nights']),
+    rooms: (row['rooms'] as string[] | undefined) || undefined,
+    adults: num(row['adults']),
+    children: num(row['children']),
+    companyName: (row['company_name'] as string | undefined) || undefined,
+    totalAmount: num(row['total_amount']),
   };
 }
 
@@ -72,7 +82,7 @@ export async function requestAdvance(
   supabase: SupabaseClient, bookingId: string, opts?: { amountRupees?: number; actor?: string },
 ): Promise<{ shortUrl: string }> {
   const { data: row } = await supabase.from('bookings')
-    .select('id, guest_name, contact_number, email, confirmation_number, source_enquiry_id, total_amount, booking_type')
+    .select('id, guest_name, contact_number, email, confirmation_number, source_enquiry_id, arrival, departure, nights, rooms, adults, children, company_name, total_amount, booking_type')
     .eq('id', bookingId).single();
   if (!row) throw new Error('Booking not found');
 
@@ -91,7 +101,7 @@ export async function requestCorporateAdvance(
   supabase: SupabaseClient, bookingId: string, opts?: { actor?: string },
 ): Promise<{ shortUrl: string }> {
   const { data: row } = await supabase.from('bookings')
-    .select('id, guest_name, contact_number, email, confirmation_number, source_enquiry_id, proforma_invoice, booking_type')
+    .select('id, guest_name, contact_number, email, confirmation_number, source_enquiry_id, arrival, departure, nights, rooms, adults, children, company_name, total_amount, proforma_invoice, booking_type')
     .eq('id', bookingId).single();
   if (!row) throw new Error('Booking not found');
   if (row['booking_type'] !== 'corporate') throw new Error('Not a corporate booking');
@@ -110,7 +120,7 @@ export async function requestBalance(
   supabase: SupabaseClient, bookingId: string, opts?: { amountRupees?: number; actor?: string },
 ): Promise<{ shortUrl: string }> {
   const { data: row } = await supabase.from('bookings')
-    .select('id, guest_name, contact_number, email, confirmation_number, source_enquiry_id, total_amount, final_bill, booking_type')
+    .select('id, guest_name, contact_number, email, confirmation_number, source_enquiry_id, arrival, departure, nights, rooms, adults, children, company_name, total_amount, final_bill, booking_type')
     .eq('id', bookingId).single();
   if (!row) throw new Error('Booking not found');
 

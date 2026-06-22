@@ -4,23 +4,39 @@ import { createClient } from '@/lib/supabase/server';
 import { ok, err, type ActionResult } from '@/lib/types/result';
 import { sendVoucher, type MsgBooking } from '@/lib/server/messaging';
 import { getVoucherShareUrl } from '@/lib/actions/vouchers';
+import { dbToBooking } from '@/lib/mappers/booking';
+import { dbToPayment } from '@/lib/mappers/payment';
+import { getBookingPaymentStatus } from '@/lib/utils/booking';
 
 export async function dispatchVoucher(bookingId: string): Promise<ActionResult> {
   if (!bookingId) return err('Booking ID required');
   const supabase = await createClient();
 
-  const { data: row } = await supabase.from('bookings')
-    .select('id, guest_name, contact_number, email, confirmation_number, source_enquiry_id')
-    .eq('id', bookingId).single();
+  const { data: row } = await supabase.from('bookings').select('*').eq('id', bookingId).single();
   if (!row) return err('Booking not found');
+  const full = dbToBooking(row);
+
+  // Payment status drives the "Paid / Balance due" lines in the voucher email.
+  const { data: payRows } = await supabase.from('payments').select('*').eq('booking_id', bookingId);
+  const ps = getBookingPaymentStatus(full, (payRows ?? []).map(dbToPayment));
 
   const booking: MsgBooking = {
-    id: row['id'] as string,
-    guestName: (row['guest_name'] as string) || 'Guest',
-    contactNumber: (row['contact_number'] as string) || '',
-    email: (row['email'] as string) || '',
-    confirmationNumber: (row['confirmation_number'] as string) || '',
-    enquiryId: (row['source_enquiry_id'] as string | null) ?? null,
+    id: full.id,
+    guestName: full.guestName || 'Guest',
+    contactNumber: full.contactNumber || '',
+    email: full.email || '',
+    confirmationNumber: full.confirmationNumber || '',
+    enquiryId: full.sourceEnquiryId,
+    arrival: full.arrival,
+    departure: full.departure,
+    nights: full.nights,
+    rooms: full.rooms,
+    adults: full.adults,
+    children: full.children,
+    companyName: full.companyName || undefined,
+    totalAmount: ps.billAmount,
+    paid: ps.totalPaid,
+    balance: ps.balance,
   };
 
   const voucherUrl = await getVoucherShareUrl(bookingId);

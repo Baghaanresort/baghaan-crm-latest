@@ -73,7 +73,9 @@ export async function createPaymentLink(
     customer: args.customer,
     notify: {
       sms: notifyOn && !!args.customer.contact,
-      email: notifyOn && !!args.customer.email,
+      // When our own Resend email is configured, we send a branded voucher/request email —
+      // so suppress Razorpay's plain email to avoid a duplicate. SMS/WhatsApp stay on.
+      email: notifyOn && !!args.customer.email && !process.env.RESEND_API_KEY,
       whatsapp: notifyOn && !!args.customer.contact,
     },
     reminder_enable: true,
