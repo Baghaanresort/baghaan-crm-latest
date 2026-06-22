@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import {
-  Plus, Calendar, ShieldCheck, Building2,
+  Plus, Calendar, Building2,
   BedDouble, Users, TrendingUp, Clock, CreditCard,
   ArrowUpRight, ArrowDownRight, Home, CheckCircle2,
   AlertCircle, DollarSign, BarChart3, Percent
@@ -68,9 +68,6 @@ export function DashboardClient({ bookings, payments, users, currentUser, today 
     const myRevenue = myBookings.filter(b => effStatus(b) !== 'hold').reduce((s, b) => s + b.totalAmount, 0);
     const activeHolds = bookings.filter(b => effStatus(b) === 'hold' && b.departure > today).sort((a, b) => (a.holdExpiresAt ?? '').localeCompare(b.holdExpiresAt ?? ''));
     const holdValue = activeHolds.reduce((s, b) => s + b.totalAmount, 0);
-    const pendingVerification = bookings.filter(b => effStatus(b) === 'pending_verification');
-    const unverifiedPayments = payments.filter(p => !p.verified);
-    const unverifiedAmount = unverifiedPayments.reduce((s, p) => s + p.amount, 0);
     const btcOpen = bookings.filter(b => b.finalBill?.isBTC && pStats(b).balance > 0);
     const btcOpenAmount = btcOpen.reduce((s, b) => s + pStats(b).balance, 0);
 
@@ -99,7 +96,7 @@ export function DashboardClient({ bookings, payments, users, currentUser, today 
     const revpar = adr * (occupancyRate / 100);
     const collectionGap = Math.max(0, expectedRevenueThisMonth - moneyReceivedThisMonth);
 
-    return { arrivingToday, departingToday, inHouse, upcoming, totalRevenue, myBookings, myRevenue, activeHolds, holdValue, pendingVerification, unverifiedPayments, unverifiedAmount, btcOpen, btcOpenAmount, collectedThisMonth, advanceThisMonth, expectedRevenueThisMonth, actualRevenueThisMonth, moneyReceivedThisMonth, resortReceivedThisMonth, resortByMode, roomNightsThisMonth, expectedAtResortThisMonth, occupancyRate, adr, revpar, collectionGap };
+    return { arrivingToday, departingToday, inHouse, upcoming, totalRevenue, myBookings, myRevenue, activeHolds, holdValue, btcOpen, btcOpenAmount, collectedThisMonth, advanceThisMonth, expectedRevenueThisMonth, actualRevenueThisMonth, moneyReceivedThisMonth, resortReceivedThisMonth, resortByMode, roomNightsThisMonth, expectedAtResortThisMonth, occupancyRate, adr, revpar, collectionGap };
   }, [bookings, payments, today, currentUser.name, effStatus, pStats]);
 
   const agentStats = useMemo(() => {
@@ -170,9 +167,9 @@ export function DashboardClient({ bookings, payments, users, currentUser, today 
       {/* ── KPI Cards ── */}
       {isAccounts && (
         <div className="grid grid-cols-4 gap-4">
-          <KPICard label="Payments to Verify" value={stats.unverifiedPayments.length} sub={`${formatAmount(stats.unverifiedAmount)} pending`} icon={ShieldCheck} color="amber" accent={stats.unverifiedPayments.length > 0} />
+          <KPICard label="Advances This Month" value={formatAmount(stats.advanceThisMonth)} sub="deposits collected" icon={CreditCard} color="amber" />
           <KPICard label="BTC Outstanding" value={stats.btcOpen.length} sub={formatAmount(stats.btcOpenAmount)} icon={Building2} color="purple" accent={stats.btcOpenAmount > 0} />
-          <KPICard label="Collected This Month" value={formatAmount(stats.collectedThisMonth)} sub="verified receipts" icon={CreditCard} color="emerald" />
+          <KPICard label="Collected This Month" value={formatAmount(stats.collectedThisMonth)} sub="all receipts" icon={CreditCard} color="emerald" />
           <KPICard label="Total Revenue" value={formatAmount(stats.totalRevenue)} sub={`${bookings.length} bookings`} icon={TrendingUp} color="blue" />
         </div>
       )}
@@ -195,47 +192,6 @@ export function DashboardClient({ bookings, payments, users, currentUser, today 
       )}
 
       {/* ── Alert Banners ── */}
-      {stats.pendingVerification.length > 0 && (
-        <AlertSection
-          color="purple"
-          icon={<ShieldCheck size={15} />}
-          title="Awaiting Payment Verification"
-          badge={stats.pendingVerification.length}
-          subtitle="Sales has logged advance — Accounts to verify against bank statement"
-        >
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-xs text-purple-700 uppercase border-b border-purple-100">
-                <th className="text-left pb-2 pt-1">Guest</th>
-                <th className="text-left pb-2 pt-1">Stay</th>
-                <th className="text-left pb-2 pt-1">Agent</th>
-                <th className="text-right pb-2 pt-1">Total</th>
-                <th className="text-right pb-2 pt-1">Unverified</th>
-              </tr>
-            </thead>
-            <tbody>
-              {stats.pendingVerification.map(b => {
-                const ps = pStats(b);
-                return (
-                  <tr key={b.id} className="border-b border-purple-50 last:border-0">
-                    <td className="py-2">
-                      <div className="flex items-center gap-2">
-                        <Avatar name={b.guestName} color="purple" />
-                        <span className="font-medium">{b.guestName}</span>
-                      </div>
-                    </td>
-                    <td className="py-2 text-xs text-stone-600">{fmtDate(b.arrival)} · {b.nights}n</td>
-                    <td className="py-2 text-xs text-stone-500">{b.createdBy}</td>
-                    <td className="py-2 text-right text-xs">₹{b.totalAmount.toLocaleString('en-IN')}</td>
-                    <td className="py-2 text-right font-semibold text-purple-800">₹{ps.totalUnverified.toLocaleString('en-IN')}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </AlertSection>
-      )}
-
       {(isAccounts || isAdmin) && stats.btcOpen.length > 0 && (
         <AlertSection color="indigo" icon={<Building2 size={15} />} title="BTC Receivables" badge={stats.btcOpen.length} subtitle="Corporate accounts awaiting payment">
           <table className="w-full text-sm">

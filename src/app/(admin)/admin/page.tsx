@@ -15,8 +15,7 @@ export default async function AdminOverviewPage() {
   const confirmedBookings = bookings.filter(b => effStatus(b) === 'confirmed').length;
   const holdBookings = bookings.filter(b => effStatus(b) === 'hold').length;
   const totalRevenue = bookings.filter(b => effStatus(b) !== 'hold').reduce((s, b) => s + b.totalAmount, 0);
-  const totalPaid = payments.filter(p => p.verified).reduce((s, p) => s + p.amount, 0);
-  const pendingVerification = payments.filter(p => !p.verified).length;
+  const totalPaid = payments.filter(p => p.type !== 'refund').reduce((s, p) => s + p.amount, 0);
 
   const recentBookings = bookings.slice(0, 10);
 
@@ -35,8 +34,7 @@ export default async function AdminOverviewPage() {
           ['Confirmed', confirmedBookings, 'text-emerald-700'],
           ['On Hold', holdBookings, 'text-amber-700'],
           ['Total Revenue', `₹${(totalRevenue / 100000).toFixed(1)}L`, 'text-emerald-800'],
-          ['Verified Paid', `₹${(totalPaid / 100000).toFixed(1)}L`, 'text-emerald-700'],
-          ['Pending Verification', pendingVerification, pendingVerification > 0 ? 'text-purple-700' : ''],
+          ['Total Paid', `₹${(totalPaid / 100000).toFixed(1)}L`, 'text-emerald-700'],
           ['Staff Accounts', users.length, ''],
           ['Today', fmtDate(today), 'text-stone-600'],
         ].map(([label, val, color]) => (

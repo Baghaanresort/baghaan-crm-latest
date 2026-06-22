@@ -34,7 +34,6 @@ interface Props {
 const STATUS_TABS = [
   { key: 'all', label: 'All', dot: '' },
   { key: 'hold', label: 'On Hold', dot: 'bg-amber-500' },
-  { key: 'pending_verification', label: 'Pending Verification', dot: 'bg-purple-500' },
   { key: 'upcoming', label: 'Confirmed', dot: 'bg-blue-500' },
   { key: 'inhouse', label: 'In House', dot: 'bg-emerald-600' },
   { key: 'past', label: 'Checked Out', dot: 'bg-stone-400' },
@@ -122,13 +121,12 @@ export function BookingsClient({ initialBookings, initialPayments, initialReques
 
   // Counts for status pill tabs
   const statusCounts = useMemo(() => {
-    const c: Record<string, number> = { all: 0, hold: 0, pending_verification: 0, upcoming: 0, inhouse: 0, past: 0, cancelled: 0 };
+    const c: Record<string, number> = { all: 0, hold: 0, upcoming: 0, inhouse: 0, past: 0, cancelled: 0 };
     bookings.forEach(b => {
       if (b.status === 'cancelled') { c['cancelled']!++; return; } // shown only under the Cancelled tab
       c['all']!++;
       const eff = getEffectiveStatus(b, payments);
       if (eff === 'hold') c['hold']!++;
-      if (eff === 'pending_verification') c['pending_verification']!++;
       if (b.arrival > today && eff === 'confirmed') c['upcoming']!++;
       if (b.arrival <= today && b.departure > today && eff === 'confirmed') c['inhouse']!++;
       if (b.departure <= today) c['past']!++;
@@ -144,7 +142,6 @@ export function BookingsClient({ initialBookings, initialPayments, initialReques
       if (filterStatus === 'cancelled') { if (b.status !== 'cancelled') return false; }
       else if (b.status === 'cancelled') return false;
       if (filterStatus === 'hold' && eff !== 'hold') return false;
-      if (filterStatus === 'pending_verification' && eff !== 'pending_verification') return false;
       if (filterStatus === 'upcoming' && (b.arrival <= today || eff !== 'confirmed')) return false;
       if (filterStatus === 'inhouse' && !(b.arrival <= today && b.departure > today && eff === 'confirmed')) return false;
       if (filterStatus === 'past' && b.departure > today) return false;
@@ -340,26 +337,24 @@ export function BookingsClient({ initialBookings, initialPayments, initialReques
               {filtered.map(b => {
                 const ps = pStats(b);
                 const eff = effStatus(b);
-                // +PAY / BILL disappear once any payment (verified or pending) has been recorded.
-                const paymentRecorded = ps.totalPaid > 0 || ps.totalUnverified > 0;
+                // For Sales, +PAY disappears once a payment is recorded (BILL is FO/Admin-only).
+                const paymentRecorded = ps.totalPaid > 0;
                 const timeStatus = b.departure <= today ? 'past' : b.arrival <= today ? 'inhouse' : 'upcoming';
 
                 let statusColor = 'bg-stone-100 text-stone-600';
                 let statusLabel = 'Checked Out';
                 let statusDot = 'bg-stone-400';
                 if (eff === 'hold') { statusColor = 'bg-amber-100 text-amber-800'; statusLabel = 'On Hold'; statusDot = 'bg-amber-500'; }
-                else if (eff === 'pending_verification') { statusColor = 'bg-purple-100 text-purple-800'; statusLabel = 'Pending Verification'; statusDot = 'bg-purple-500'; }
                 else if (timeStatus === 'inhouse') { statusColor = 'bg-emerald-100 text-emerald-800'; statusLabel = 'In House'; statusDot = 'bg-emerald-600'; }
                 else if (timeStatus === 'upcoming') { statusColor = 'bg-blue-100 text-blue-800'; statusLabel = 'Confirmed'; statusDot = 'bg-blue-500'; }
                 if (b.status === 'cancelled') { statusColor = 'bg-stone-200 text-stone-500'; statusLabel = 'Cancelled'; statusDot = 'bg-stone-400'; }
 
                 let payBadgeLabel = 'Unpaid';
                 let payBadgeColor = 'bg-red-100 text-red-700';
-                if (ps.totalUnverified > 0 && ps.totalPaid === 0) { payBadgeLabel = 'Awaiting Verification'; payBadgeColor = 'bg-purple-100 text-purple-700'; }
-                else if (ps.billAmount > 0 && ps.balance <= 0) { payBadgeLabel = 'Settled'; payBadgeColor = 'bg-emerald-100 text-emerald-700'; }
+                if (ps.billAmount > 0 && ps.balance <= 0) { payBadgeLabel = 'Settled'; payBadgeColor = 'bg-emerald-100 text-emerald-700'; }
                 else if (ps.totalPaid > 0) { payBadgeLabel = 'Partially Paid'; payBadgeColor = 'bg-amber-100 text-amber-700'; }
 
-                const rowHighlight = eff === 'hold' ? 'bg-amber-50/30' : eff === 'pending_verification' ? 'bg-purple-50/30' : '';
+                const rowHighlight = eff === 'hold' ? 'bg-amber-50/30' : '';
 
                 return (
                   <tr key={b.id} className={`border-t border-stone-100 hover:bg-stone-50 transition-colors ${rowHighlight}`}>
@@ -420,12 +415,13 @@ export function BookingsClient({ initialBookings, initialPayments, initialReques
                             <Edit2 size={13} />
                           </button>
                         )}
-                        {(isSales || isFO || isAdmin) && !paymentRecorded && (
+                        {/* Sales loses +PAY once a payment is recorded; FO/Admin keep it. */}
+                        {((isFO || isAdmin) || (isSales && !paymentRecorded)) && (
                           <button onClick={() => setPaymentFor(b)} title="Add payment" className="text-xs bg-emerald-700 text-white px-2 py-1 hover:bg-emerald-800 transition-colors">
                             +PAY
                           </button>
                         )}
-                        {(isFO || isAdmin) && !paymentRecorded && (
+                        {(isFO || isAdmin) && (
                           <button onClick={() => setFinalBillFor(b)} title="Final bill" className="text-xs bg-blue-700 text-white px-2 py-1 hover:bg-blue-800 transition-colors">
                             BILL
                           </button>

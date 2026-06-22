@@ -85,7 +85,6 @@ export function CorporateClient({ initialBookings, initialPayments, users, lastA
     const ps = getBookingPaymentStatus(b, payments);
     if (ps.billAmount > 0 && ps.balance <= 0) return { label: 'Paid', cls: 'bg-emerald-100 text-emerald-800' };
     if (ps.totalPaid > 0) return { label: 'Partial', cls: 'bg-amber-100 text-amber-800' };
-    if (ps.totalUnverified > 0) return { label: 'Unverified', cls: 'bg-purple-100 text-purple-800' };
     return { label: 'Pending', cls: 'bg-stone-100 text-stone-600' };
   };
 

@@ -83,10 +83,11 @@ export async function addPayment(
     reference: parsed.data.reference ?? '',
     type: parsed.data.type,
     notes: parsed.data.notes ?? '',
-    // Verification removed: every recorded payment counts immediately.
+    // Verification removed: every recorded payment counts immediately. Don't stamp a
+    // verifier (no separate Accounts review happens) — recordedBy/recordedAt is the trail.
     verified: true,
-    verifiedBy: actor.name,
-    verifiedAt: now,
+    verifiedBy: null,
+    verifiedAt: null,
     recordedAt: now,
     recordedBy: actor.name,
     recordedByRole: actor.role,
@@ -107,71 +108,8 @@ export async function addPayment(
   return ok({ id });
 }
 
-// ---------- verifyPayment ----------
-
-export async function verifyPayment(paymentId: string): Promise<ActionResult> {
-  if (!paymentId) return err('Payment ID required');
-
-  const supabase = await createClient();
-  const actor = await getAuthedUser(supabase);
-  if (!actor) return err('Not authenticated');
-  if (!['Accounts', 'Admin'].includes(actor.role)) {
-    return err('Only Accounts and Admin can verify payments');
-  }
-
-  const { data: pay } = await supabase.from('payments').select('booking_id, amount').eq('id', paymentId).single();
-
-  const { error } = await supabase
-    .from('payments')
-    .update({
-      verified: true,
-      verified_at: new Date().toISOString(),
-      verified_by: actor.name,
-    })
-    .eq('id', paymentId);
-
-  if (error) {
-    console.error('[verifyPayment]', error);
-    return err('Failed to verify payment.');
-  }
-
-  if (pay?.['booking_id']) {
-    await onPaymentVerified(supabase, pay['booking_id'] as string, Number(pay['amount'] ?? 0), actor);
-    await syncEnquiryStageFromPayment(supabase, pay['booking_id'] as string);
-  }
-
-  revalidatePaymentPaths();
-  return ok(undefined);
-}
-
-// ---------- unverifyPayment ----------
-
-export async function unverifyPayment(paymentId: string): Promise<ActionResult> {
-  if (!paymentId) return err('Payment ID required');
-
-  const supabase = await createClient();
-  const actor = await getAuthedUser(supabase);
-  if (!actor) return err('Not authenticated');
-  if (!['Accounts', 'Admin'].includes(actor.role)) {
-    return err('Only Accounts and Admin can un-verify payments');
-  }
-
-  const { data: pay } = await supabase.from('payments').select('booking_id').eq('id', paymentId).single();
-
-  const { error } = await supabase
-    .from('payments')
-    .update({ verified: false, verified_at: null, verified_by: null })
-    .eq('id', paymentId);
-
-  if (error) {
-    console.error('[unverifyPayment]', error);
-    return err('Failed to un-verify payment.');
-  }
-
-  if (pay?.['booking_id']) await syncEnquiryStageFromPayment(supabase, pay['booking_id'] as string);
-  revalidatePaymentPaths();
-  return ok(undefined);
-}
+// Verification removed: every recorded payment counts immediately, so the
+// verifyPayment / unverifyPayment actions and the Pending-Verification flow are gone.
 
 // ---------- initiateRefund ----------
 

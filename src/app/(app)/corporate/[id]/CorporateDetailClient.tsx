@@ -270,7 +270,6 @@ export function CorporateDetailClient({ booking, payments, users, currentUser }:
                 <Money label="Taxes" value="Included" muted />
                 <Money label="Advance Required" value={inr(ps.advanceRequired)} />
                 <Money label="Advance Received" value={inr(ps.totalPaid)} tone={ps.totalPaid > 0 ? 'text-emerald-700' : 'text-stone-500'} />
-                {ps.totalUnverified > 0 && <Money label="Unverified" value={inr(ps.totalUnverified)} tone="text-amber-600" />}
                 <div className="border-t border-stone-200 pt-2.5">
                   <Money label="Outstanding" value={inr(Math.max(0, ps.balance))} tone={balanceTone} strong />
                 </div>
