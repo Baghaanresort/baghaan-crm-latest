@@ -59,14 +59,17 @@ async function rzpFetch(path: string, init: RequestInit): Promise<Record<string,
 export async function createPaymentLink(
   args: CreatePaymentLinkArgs,
 ): Promise<{ id: string; shortUrl: string; status: string }> {
+  // By default let Razorpay deliver the link by SMS + email to the customer (zero setup).
+  // Set RAZORPAY_NOTIFY=false once your own WhatsApp/email delivery is configured, to
+  // avoid double-notifying.
+  const notify = process.env.RAZORPAY_NOTIFY !== 'false';
   const body: Record<string, unknown> = {
     amount: args.amountPaise,
     currency: 'INR',
     reference_id: args.referenceId,
     description: args.description,
     customer: args.customer,
-    // We deliver the link ourselves (WhatsApp/email); don't double-notify.
-    notify: { sms: false, email: false },
+    notify: { sms: notify, email: notify },
     reminder_enable: true,
     notes: args.notes ?? {},
   };
