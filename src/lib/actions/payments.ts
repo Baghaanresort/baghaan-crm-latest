@@ -6,7 +6,6 @@ import { createClient } from '@/lib/supabase/server';
 import { ok, err, type ActionResult } from '@/lib/types/result';
 import { PaymentSchema } from '@/lib/validations/booking';
 import { paymentToDb } from '@/lib/mappers/payment';
-import { FO_AUTO_VERIFY_MODES } from '@/lib/constants/payments';
 import { onPaymentVerified, syncEnquiryStageFromPayment } from '@/lib/server/payment-sync';
 import type { Payment } from '@/lib/types/payment';
 
@@ -75,9 +74,6 @@ export async function addPayment(
   const now = new Date().toISOString();
   const id = `PAY-${Date.now()}`;
 
-  // Auto-verify logic: FO role + Cash/Card/Debit Card = verified immediately
-  const isAutoVerify = actor.role === 'Front Office' && FO_AUTO_VERIFY_MODES.has(parsed.data.mode);
-
   const payment: Payment = {
     id,
     bookingId: parsed.data.bookingId,
@@ -87,9 +83,10 @@ export async function addPayment(
     reference: parsed.data.reference ?? '',
     type: parsed.data.type,
     notes: parsed.data.notes ?? '',
-    verified: isAutoVerify,
-    verifiedBy: isAutoVerify ? actor.name : null,
-    verifiedAt: isAutoVerify ? now : null,
+    // Verification removed: every recorded payment counts immediately.
+    verified: true,
+    verifiedBy: actor.name,
+    verifiedAt: now,
     recordedAt: now,
     recordedBy: actor.name,
     recordedByRole: actor.role,
@@ -102,10 +99,8 @@ export async function addPayment(
     return err('Failed to record payment. Please try again.');
   }
 
-  // FO cash/card payments are verified on the spot — run corporate automation now.
-  if (isAutoVerify) {
-    await onPaymentVerified(supabase, payment.bookingId, payment.amount, actor);
-  }
+  // Every recorded payment counts now — run corporate stage automation.
+  await onPaymentVerified(supabase, payment.bookingId, payment.amount, actor);
 
   await syncEnquiryStageFromPayment(supabase, payment.bookingId);
   revalidatePaymentPaths();

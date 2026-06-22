@@ -9,12 +9,9 @@ export function addOnsTotal(addOns: AddOn[] | null | undefined): number {
 export function getEffectiveStatus(booking: Booking, payments: Payment[]): EffectiveStatus {
   // Refunds are outgoing money — never count them as "paid" toward a reservation.
   const bookingPayments = payments.filter((p) => p.bookingId === booking.id && p.type !== 'refund');
-  const totalPaid = bookingPayments
-    .filter((p) => p.verified)
-    .reduce((s, p) => s + p.amount, 0);
-  const totalUnverified = bookingPayments
-    .filter((p) => !p.verified)
-    .reduce((s, p) => s + p.amount, 0);
+  // Verification removed: every non-refund payment counts immediately.
+  const totalPaid = bookingPayments.reduce((s, p) => s + p.amount, 0);
+  const totalUnverified = 0;
 
   if (booking.bookingType === 'corporate') {
     const stage = booking.corporateStage;
@@ -42,11 +39,9 @@ export function getBookingPaymentStatus(
   const allForBooking = payments.filter((p) => p.bookingId === booking.id);
   // Incoming payments drive paid/balance; refunds are tracked separately as outflow.
   const bookingPayments = allForBooking.filter((p) => p.type !== 'refund');
-  const verifiedPayments = bookingPayments.filter((p) => p.verified);
-  const totalPaid = verifiedPayments.reduce((s, p) => s + p.amount, 0);
-  const totalUnverified = bookingPayments
-    .filter((p) => !p.verified)
-    .reduce((s, p) => s + p.amount, 0);
+  // Verification removed: every non-refund payment counts toward paid/balance immediately.
+  const totalPaid = bookingPayments.reduce((s, p) => s + p.amount, 0);
+  const totalUnverified = 0;
   const totalRefunded = allForBooking
     .filter((p) => p.type === 'refund' && p.refundStatus === 'done')
     .reduce((s, p) => s + p.amount, 0);
