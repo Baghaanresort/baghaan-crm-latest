@@ -71,7 +71,11 @@ export async function createPaymentLink(
     reference_id: args.referenceId,
     description: args.description,
     customer: args.customer,
-    notify: { sms: notifyOn && !!args.customer.contact, email: notifyOn && !!args.customer.email },
+    notify: {
+      sms: notifyOn && !!args.customer.contact,
+      email: notifyOn && !!args.customer.email,
+      whatsapp: notifyOn && !!args.customer.contact,
+    },
     reminder_enable: true,
     notes: args.notes ?? {},
   };
