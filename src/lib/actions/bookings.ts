@@ -367,9 +367,19 @@ export async function checkOutBooking(bookingId: string): Promise<ActionResult> 
   if (!['Front Office', 'Admin'].includes(actor.role)) return err('Only Front Office and Admin can check guests out');
 
   const { data: current } = await supabase
-    .from('bookings').select('status').eq('id', bookingId).single();
+    .from('bookings').select('status, final_bill, total_amount').eq('id', bookingId).single();
   if (!current) return err('Booking not found');
   if (current['status'] !== 'checked_in') return err('Only a checked-in guest can be checked out.');
+
+  // Business rule: a guest is never checked out while money is still owing. The final bill
+  // must exist and the balance must be fully settled (₹0). Enforced server-side, not just UI.
+  const finalBill = current['final_bill'] as { totalAmount?: number } | null;
+  const billAmount = Number(finalBill?.totalAmount ?? 0);
+  if (!finalBill || !(billAmount > 0)) return err('Add the final bill before checking out.');
+  const { data: payRows } = await supabase.from('payments').select('amount, type').eq('booking_id', bookingId);
+  const paid = (payRows ?? []).filter((p) => p['type'] !== 'refund').reduce((s, p) => s + Number(p['amount'] ?? 0), 0);
+  const balance = billAmount - paid;
+  if (balance > 0) return err(`Balance of ₹${balance.toLocaleString('en-IN')} must be settled before checkout.`);
 
   const now = new Date().toISOString();
   const { error } = await supabase.from('bookings').update({ status: 'checked_out' }).eq('id', bookingId);

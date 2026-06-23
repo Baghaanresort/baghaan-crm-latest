@@ -18,9 +18,10 @@ interface Props {
   currentUser: { name: string; role: string };
   payments: Payment[];
   onClose: () => void;
+  readOnly?: boolean;
 }
 
-export function FinalBillModal({ booking, currentUser, payments, onClose }: Props) {
+export function FinalBillModal({ booking, currentUser, payments, onClose, readOnly = false }: Props) {
   const today = todayISO();
   const [isPending, startTransition] = useTransition();
   const ps = getBookingPaymentStatus(booking, payments);
@@ -94,8 +95,8 @@ export function FinalBillModal({ booking, currentUser, payments, onClose }: Prop
       <div className="bg-stone-50 max-w-2xl w-full my-8">
         <div className="sticky top-0 bg-blue-700 text-white px-6 py-4 flex justify-between items-center z-10">
           <div>
-            <h2 style={{ fontFamily: "'Cormorant Garamond', serif", fontWeight: 600 }} className="text-xl tracking-wider">Final Bill</h2>
-            <p className="text-xs text-blue-100 mt-0.5">{booking.confirmationNumber} · {booking.guestName}</p>
+            <h2 style={{ fontFamily: "'Cormorant Garamond', serif", fontWeight: 600 }} className="text-xl tracking-wider">Final Bill{readOnly ? ' — View Only' : ''}</h2>
+            <p className="text-xs text-blue-100 mt-0.5">{booking.confirmationNumber} · {booking.guestName}{readOnly ? ' · checked out' : ''}</p>
           </div>
           <button onClick={onClose} className="hover:bg-blue-800 p-1.5 rounded"><X size={18} /></button>
         </div>
@@ -104,21 +105,23 @@ export function FinalBillModal({ booking, currentUser, payments, onClose }: Prop
           {/* Payment summary */}
           <div className="bg-stone-100 px-4 py-3 grid grid-cols-3 gap-4 text-sm">
             <div><div className="text-xs text-stone-500 uppercase">Estimated</div><div className="font-medium">₹{booking.totalAmount.toLocaleString('en-IN')}</div></div>
-            <div><div className="text-xs text-stone-500 uppercase">Verified Paid</div><div className="font-medium text-emerald-700">₹{ps.totalPaid.toLocaleString('en-IN')}</div></div>
+            <div><div className="text-xs text-stone-500 uppercase">Paid</div><div className="font-medium text-emerald-700">₹{ps.totalPaid.toLocaleString('en-IN')}</div></div>
             <div><div className="text-xs text-stone-500 uppercase">Balance Due</div><div className={`font-medium ${ps.balance > 0 ? 'text-red-700' : 'text-emerald-700'}`}>₹{Math.abs(ps.balance).toLocaleString('en-IN')}{ps.balance < 0 ? ' CR' : ''}</div></div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div><label className="text-xs text-stone-600 uppercase tracking-wider block mb-1">Bill Number *</label><input value={form.billNumber} onChange={e => setForm(f => ({ ...f, billNumber: e.target.value }))} placeholder="From your invoicing software" className="w-full px-3 py-2 border border-stone-300 text-sm outline-none bg-white" /></div>
-            <div><label className="text-xs text-stone-600 uppercase tracking-wider block mb-1">Bill Amount (₹) *</label><NumberInput value={form.totalAmount} min={0} onChange={n => setForm(f => ({ ...f, totalAmount: n }))} className="w-full px-3 py-2 border border-stone-300 text-sm outline-none bg-white" /></div>
-          </div>
+          <fieldset disabled={readOnly} className="space-y-4 border-0 p-0 m-0 disabled:opacity-90">
+            <div className="grid grid-cols-2 gap-4">
+              <div><label className="text-xs text-stone-600 uppercase tracking-wider block mb-1">Bill Number *</label><input value={form.billNumber} onChange={e => setForm(f => ({ ...f, billNumber: e.target.value }))} placeholder="From your invoicing software" className="w-full px-3 py-2 border border-stone-300 text-sm outline-none bg-white disabled:bg-stone-100" /></div>
+              <div><label className="text-xs text-stone-600 uppercase tracking-wider block mb-1">Bill Amount (₹) *</label><NumberInput value={form.totalAmount} min={0} onChange={n => setForm(f => ({ ...f, totalAmount: n }))} className="w-full px-3 py-2 border border-stone-300 text-sm outline-none bg-white disabled:bg-stone-100" /></div>
+            </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div><label className="text-xs text-stone-600 uppercase tracking-wider block mb-1">Bill Date *</label><DateInput value={form.billDate} onChange={v => setForm(f => ({ ...f, billDate: v }))} className="w-full" /></div>
-            <div className="flex items-end pb-2"><label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={form.isBTC} onChange={e => setForm(f => ({ ...f, isBTC: e.target.checked }))} /><span className="text-sm">Bill to Company (BTC)</span></label></div>
-          </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div><label className="text-xs text-stone-600 uppercase tracking-wider block mb-1">Bill Date *</label><DateInput value={form.billDate} onChange={v => setForm(f => ({ ...f, billDate: v }))} className="w-full" /></div>
+              <div className="flex items-end pb-2"><label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={form.isBTC} onChange={e => setForm(f => ({ ...f, isBTC: e.target.checked }))} /><span className="text-sm">Bill to Company (BTC)</span></label></div>
+            </div>
 
-          <div><label className="text-xs text-stone-600 uppercase tracking-wider block mb-1">Notes</label><textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} rows={2} className="w-full px-3 py-2 border border-stone-300 text-sm outline-none bg-white" /></div>
+            <div><label className="text-xs text-stone-600 uppercase tracking-wider block mb-1">Notes</label><textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} rows={2} className="w-full px-3 py-2 border border-stone-300 text-sm outline-none bg-white disabled:bg-stone-100" /></div>
+          </fieldset>
 
           {/* Payment history */}
           {payments.length > 0 && (
@@ -141,7 +144,7 @@ export function FinalBillModal({ booking, currentUser, payments, onClose }: Prop
           )}
 
           {/* Quick payment addition */}
-          {payForm.show ? (
+          {!readOnly && (payForm.show ? (
             <div className="bg-blue-50 border border-blue-200 p-4 space-y-3">
               <h4 className="text-xs uppercase tracking-wider text-blue-900 font-medium">Record Additional Payment</h4>
               <div className="grid grid-cols-3 gap-3">
@@ -156,20 +159,28 @@ export function FinalBillModal({ booking, currentUser, payments, onClose }: Prop
             </div>
           ) : (
             <button onClick={() => setPayForm(f => ({ ...f, show: true }))} className="text-xs text-blue-700 hover:underline">+ Record additional payment</button>
-          )}
+          ))}
 
           <div className="flex justify-between pt-4 border-t border-stone-300">
-            <div>
-              {booking.finalBill && (
-                <button onClick={handleClear} disabled={isPending} className="text-xs text-red-700 hover:underline disabled:opacity-50">Remove final bill</button>
-              )}
-            </div>
-            <div className="flex gap-3">
-              <button onClick={onClose} className="px-5 py-2.5 text-sm border border-stone-300 hover:bg-stone-100 transition tracking-wider">CANCEL</button>
-              <button onClick={handleSave} disabled={isPending} className="px-6 py-2.5 text-sm bg-blue-700 hover:bg-blue-800 text-white transition tracking-wider disabled:opacity-50">
-                {isPending ? 'SAVING…' : booking.finalBill ? 'UPDATE BILL' : 'RECORD BILL'}
-              </button>
-            </div>
+            {readOnly ? (
+              <div className="w-full flex justify-end">
+                <button onClick={onClose} className="px-6 py-2.5 text-sm border border-stone-300 hover:bg-stone-100 transition tracking-wider">CLOSE</button>
+              </div>
+            ) : (
+              <>
+                <div>
+                  {booking.finalBill && (
+                    <button onClick={handleClear} disabled={isPending} className="text-xs text-red-700 hover:underline disabled:opacity-50">Remove final bill</button>
+                  )}
+                </div>
+                <div className="flex gap-3">
+                  <button onClick={onClose} className="px-5 py-2.5 text-sm border border-stone-300 hover:bg-stone-100 transition tracking-wider">CANCEL</button>
+                  <button onClick={handleSave} disabled={isPending} className="px-6 py-2.5 text-sm bg-blue-700 hover:bg-blue-800 text-white transition tracking-wider disabled:opacity-50">
+                    {isPending ? 'SAVING…' : booking.finalBill ? 'UPDATE BILL' : 'RECORD BILL'}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>

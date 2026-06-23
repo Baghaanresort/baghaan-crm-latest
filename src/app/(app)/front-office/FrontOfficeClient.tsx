@@ -29,6 +29,7 @@ export function FrontOfficeClient({ initialBookings, initialPayments, currentUse
   const [tab, setTab] = useState<SubTab>('arrivals');
   const [paymentFor, setPaymentFor] = useState<Booking | null>(null);
   const [finalBillFor, setFinalBillFor] = useState<Booking | null>(null);
+  const [billReadOnly, setBillReadOnly] = useState(false);
   const [checkInFor, setCheckInFor] = useState<Booking | null>(null);
   const [checkOutFor, setCheckOutFor] = useState<Booking | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -75,6 +76,9 @@ export function FrontOfficeClient({ initialBookings, initialPayments, currentUse
   // Front Office collects money only at checkout, so Pay/Bill appear once the guest
   // is at/after departure. Advances during the stay are taken by Sales (bookings tab).
   const atCheckout = (b: Booking) => b.departure <= today && (b.status === 'checked_in' || b.status === 'checked_out');
+
+  // Open the final-bill modal; checked-out rows open it view-only (no edits after checkout).
+  const openBill = (b: Booking, ro: boolean) => { setBillReadOnly(ro); setFinalBillFor(b); };
 
   const handleCheckIn = (details: CheckInDetailsInput) => {
     const target = checkInFor;
@@ -135,9 +139,11 @@ export function FrontOfficeClient({ initialBookings, initialPayments, currentUse
             <tbody>
               {activeList.items.map(b => {
                 const ps = pStats(b);
-                // 3-step checkout gate: bill must be added → then payment → then checkout.
+                // Checkout gate: the final bill must exist AND the balance must be fully
+                // settled (₹0). A guest is never checked out while money is still owing.
                 const hasBill = !!b.finalBill;
-                const hasPayment = ps.totalPaid > 0;
+                const settled = hasBill && ps.balance <= 0;
+                const isOut = b.status === 'checked_out';
                 return (
                   <tr key={b.id} className="border-t border-stone-100 hover:bg-stone-50">
                     <td className="p-3">
@@ -164,19 +170,22 @@ export function FrontOfficeClient({ initialBookings, initialPayments, currentUse
                             </button>
                           )}
                           {b.status === 'checked_in' && (
-                            <button onClick={() => setCheckOutFor(b)} disabled={isPending || !hasPayment} title={hasPayment ? 'Check out guest' : 'Record a payment before checking out'} className="inline-flex items-center gap-1 text-xs border border-stone-300 text-stone-700 px-2.5 py-1 hover:bg-stone-100 disabled:opacity-50 disabled:cursor-not-allowed">
+                            <button onClick={() => setCheckOutFor(b)} disabled={isPending || !settled} title={!hasBill ? 'Add the final bill before checkout' : ps.balance > 0 ? `Balance of ₹${ps.balance.toLocaleString('en-IN')} must be settled before checkout` : 'Check out guest'} className="inline-flex items-center gap-1 text-xs border border-stone-300 text-stone-700 px-2.5 py-1 hover:bg-stone-100 disabled:opacity-50 disabled:cursor-not-allowed">
                               <LogOut size={12} /> CHECK OUT
                             </button>
                           )}
                           {atCheckout(b) && (
                             <>
-                              <button onClick={() => setPaymentFor(b)} disabled={!hasBill} title={hasBill ? 'Record payment' : 'Add the bill before recording payment'} className="text-xs bg-emerald-700 text-white px-2.5 py-1 hover:bg-emerald-800 disabled:opacity-50 disabled:cursor-not-allowed">+ PAY</button>
+                              {/* +PAY drops off once checked out — nothing left to collect. */}
+                              {!isOut && (
+                                <button onClick={() => setPaymentFor(b)} disabled={!hasBill} title={hasBill ? 'Record payment' : 'Add the bill before recording payment'} className="text-xs bg-emerald-700 text-white px-2.5 py-1 hover:bg-emerald-800 disabled:opacity-50 disabled:cursor-not-allowed">+ PAY</button>
+                              )}
                               {hasBill ? (
-                                <button onClick={() => setFinalBillFor(b)} title="Bill added — view or edit" className="inline-flex items-center gap-1 text-xs border border-emerald-600 text-emerald-700 px-2.5 py-1 hover:bg-emerald-50">
+                                <button onClick={() => openBill(b, isOut)} title={isOut ? 'View / print final bill' : 'Bill added — view or edit'} className="inline-flex items-center gap-1 text-xs border border-emerald-600 text-emerald-700 px-2.5 py-1 hover:bg-emerald-50">
                                   <Check size={12} /> ADDED
                                 </button>
                               ) : (
-                                <button onClick={() => setFinalBillFor(b)} className="text-xs bg-blue-700 text-white px-2.5 py-1 hover:bg-blue-800">BILL</button>
+                                <button onClick={() => openBill(b, false)} className="text-xs bg-blue-700 text-white px-2.5 py-1 hover:bg-blue-800">BILL</button>
                               )}
                             </>
                           )}
@@ -192,7 +201,7 @@ export function FrontOfficeClient({ initialBookings, initialPayments, currentUse
       </div>
 
       {paymentFor && <PaymentModal booking={paymentFor} currentUser={currentUser} payments={payments.filter(p => p.bookingId === paymentFor.id)} onClose={() => setPaymentFor(null)} />}
-      {finalBillFor && <FinalBillModal booking={finalBillFor} currentUser={currentUser} payments={payments.filter(p => p.bookingId === finalBillFor.id)} onClose={() => setFinalBillFor(null)} />}
+      {finalBillFor && <FinalBillModal booking={finalBillFor} currentUser={currentUser} payments={payments.filter(p => p.bookingId === finalBillFor.id)} readOnly={billReadOnly} onClose={() => { setFinalBillFor(null); setBillReadOnly(false); }} />}
       {checkInFor && <CheckInModal booking={checkInFor} onConfirm={handleCheckIn} onClose={() => setCheckInFor(null)} isPending={isPending} />}
 
       {checkOutFor && (
