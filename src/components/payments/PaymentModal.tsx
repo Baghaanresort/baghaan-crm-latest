@@ -48,10 +48,12 @@ export function PaymentModal({ booking, currentUser, payments, paymentLinks = []
   // An enquiry-linked hold may have been blocked without a quote. The advance is a
   // slice of the package total, so capture (and require) the total here.
   const isEnquiryHold = !!booking.sourceEnquiryId && booking.status === 'hold';
+  // Suggest the outstanding "advance to be paid" as the amount when one is set on the hold.
+  const advancePrefill = Math.max(0, (booking.advanceRequired ?? 0) - payments.filter(p => p.type !== 'refund').reduce((s, p) => s + p.amount, 0));
 
   const [form, setForm] = useState({
     paymentDate: today,
-    amount: '',
+    amount: advancePrefill > 0 ? String(advancePrefill) : '',
     totalAmount: booking.totalAmount ? String(booking.totalAmount) : '',
     mode: 'UPI',
     reference: '',

@@ -10,6 +10,7 @@ export const EnquiryBlockSchema = z
     children: z.number().int().min(0),
     rooms: z.array(z.string()).min(1, 'Select at least one room to block'),
     quotedAmount: z.number().min(0).optional().default(0),
+    advanceRequired: z.number().min(0).optional().default(0),
     addOns: z.array(AddOnSchema).optional().default([]),
     roomCharges: z.array(RoomChargeSchema).optional().default([]),
     notes: z.string().optional().default(''),

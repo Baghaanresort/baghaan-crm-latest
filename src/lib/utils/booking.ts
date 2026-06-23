@@ -56,7 +56,9 @@ export function getBookingPaymentStatus(
     ? booking.finalBill!.totalAmount
     : booking.totalAmount;
   const balance = billAmount - totalPaid;
-  const advanceRequired = booking.proformaInvoice?.advanceRequired ?? 0;
+  // Corporate deals carry the target on the proforma invoice; regular holds use the
+  // booking-level "advance to be paid".
+  const advanceRequired = Number(booking.proformaInvoice?.advanceRequired ?? booking.advanceRequired ?? 0);
   const advanceShortfall = Math.max(0, advanceRequired - totalPaid);
   return {
     totalPaid,

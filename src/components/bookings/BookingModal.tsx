@@ -144,6 +144,7 @@ export function BookingModal({ booking, users, currentUser, existingBookings, pr
       rateBreakdown: displayBreakdown,
       roomCharges: roomCharges.filter(r => (Number(r.total) || 0) > 0 || r.roomType.trim() !== ''),
       addOns: form.addOns.filter(a => a.name.trim() !== '' || a.total > 0),
+      advanceRequired: 0,
       bookingType: 'regular' as const,
     };
 

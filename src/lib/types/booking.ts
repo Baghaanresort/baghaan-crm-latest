@@ -110,6 +110,7 @@ export interface Booking {
   addOns: AddOn[];
   roomCharges: RoomCharge[];
   checkInDetails: CheckInDetails | null;
+  advanceRequired: number;
   advancePaid: number;
   inclusions: string;
   remarks: string;

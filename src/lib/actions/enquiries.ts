@@ -313,6 +313,7 @@ export async function blockEnquiryRooms(
     children: parsed.data.children,
     rooms: parsed.data.rooms,
     quotedAmount: parsed.data.quotedAmount ?? 0,
+    advanceRequired: parsed.data.advanceRequired ?? 0,
     addOns: parsed.data.addOns ?? [],
     roomCharges: parsed.data.roomCharges ?? [],
     notes: parsed.data.notes ?? '',

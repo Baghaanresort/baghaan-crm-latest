@@ -60,6 +60,7 @@ export function BlockModal({ currentUser, existingBookings, booking, enquiry, on
       // Blank by default (not 0): an empty quote ≠ a quote of zero. Stored total is the
       // grand total (package + add-ons); show only the package portion here.
       quotedAmount: booking?.totalAmount ? String(booking.totalAmount - addOnsTotal(booking.addOns ?? [])) : '',
+      advanceRequired: booking?.advanceRequired ? String(booking.advanceRequired) : '',
       addOns: booking?.addOns ?? ([] as Booking['addOns']),
       roomCharges: booking?.roomCharges ?? ([] as Booking['roomCharges']),
       notes: booking?.remarks ?? '',
@@ -122,6 +123,7 @@ export function BlockModal({ currentUser, existingBookings, booking, enquiry, on
     const cleanAddOns = form.addOns.filter(a => a.name.trim() !== '' || a.total > 0);
     const cleanRoomCharges = roomCharges.filter(r => (Number(r.total) || 0) > 0 || r.roomType.trim() !== '');
     const grand = quoted + addOnsTotal(cleanAddOns);
+    const advReq = form.advanceRequired.trim() === '' ? 0 : Math.max(0, Number(form.advanceRequired) || 0);
 
     startTransition(async () => {
       if (isEdit && booking) {
@@ -140,6 +142,7 @@ export function BlockModal({ currentUser, existingBookings, booking, enquiry, on
           totalAmount: grand,
           addOns: cleanAddOns,
           roomCharges: cleanRoomCharges,
+          advanceRequired: advReq,
           remarks: form.notes,
           holdExpiresAt: form.holdExpiresAt || null,
           status: 'hold',
@@ -150,13 +153,13 @@ export function BlockModal({ currentUser, existingBookings, booking, enquiry, on
         const result = await blockEnquiryRooms(enquiry.id, {
           arrival: form.arrival, departure: form.departure, nights: nights,
           adults: form.adults, children: form.children, rooms: form.rooms,
-          quotedAmount: grand, addOns: cleanAddOns, roomCharges: cleanRoomCharges, notes: form.notes, holdExpiresAt: form.holdExpiresAt || null,
+          quotedAmount: grand, advanceRequired: advReq, addOns: cleanAddOns, roomCharges: cleanRoomCharges, notes: form.notes, holdExpiresAt: form.holdExpiresAt || null,
         });
         if (!result.success) { toast.error(result.error); return; }
         toast.success(`Rooms blocked: ${result.data.confirmationNumber}`);
         onBlocked?.();
       } else {
-        const result = await createBlockedRoom({ ...form, nights, quotedAmount: grand, addOns: cleanAddOns, roomCharges: cleanRoomCharges, createdBy: currentUser.name });
+        const result = await createBlockedRoom({ ...form, nights, quotedAmount: grand, advanceRequired: advReq, addOns: cleanAddOns, roomCharges: cleanRoomCharges, createdBy: currentUser.name });
         if (!result.success) { toast.error(result.error); return; }
         toast.success(`Rooms blocked: ${result.data.confirmationNumber}`);
       }
@@ -241,8 +244,9 @@ export function BlockModal({ currentUser, existingBookings, booking, enquiry, on
             )}
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-3 gap-4">
             <div><label className="text-xs text-stone-600 uppercase tracking-wider block mb-1">Quoted Amount (₹) — overrides room charges</label><input type="number" min="0" value={form.quotedAmount} onChange={e => update('quotedAmount', e.target.value)} placeholder={roomSum > 0 ? `₹${roomSum.toLocaleString('en-IN')} (auto)` : '—'} className="w-full px-3 py-2 border border-stone-300 text-sm outline-none bg-white" /></div>
+            <div><label className="text-xs text-stone-600 uppercase tracking-wider block mb-1">Advance to be Paid (₹)</label><input type="number" min="0" value={form.advanceRequired} onChange={e => update('advanceRequired', e.target.value)} placeholder="Deposit to confirm" className="w-full px-3 py-2 border border-stone-300 text-sm outline-none bg-white" /></div>
             <div><label className="text-xs text-stone-600 uppercase tracking-wider block mb-1">Quick Note</label><input value={form.notes} onChange={e => update('notes', e.target.value)} placeholder="e.g. 'Will pay by Friday'" className="w-full px-3 py-2 border border-stone-300 text-sm outline-none bg-white" /></div>
           </div>
 

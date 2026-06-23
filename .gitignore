@@ -42,3 +42,7 @@ next-env.d.ts
 
 # Browser-automation scratch (Playwright MCP)
 .playwright-mcp/
+
+# stray playwright snapshot exports
+bookings.yml
+*.playwright-snapshot.yml

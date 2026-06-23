@@ -165,6 +165,7 @@ export async function createBlockedRoom(
     addOns: parsed.data.addOns ?? [],
     roomCharges: parsed.data.roomCharges ?? [],
     checkInDetails: null,
+    advanceRequired: parsed.data.advanceRequired ?? 0,
     advancePaid: 0,
     inclusions: '',
     remarks: parsed.data.notes ?? '',
