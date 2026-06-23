@@ -261,7 +261,7 @@ export function CorporateClient({ initialBookings, initialPayments, users, lastA
           </button>
           {(isSales || isAdmin) && (
             <button onClick={() => setShowNew(true)} className="bg-emerald-900 hover:bg-emerald-800 text-amber-100 px-5 py-2.5 text-sm tracking-wider flex items-center gap-2 transition">
-              <Plus size={16} /> NEW CORPORATE BOOKING
+              <Plus size={16} /> NEW COMPANY DETAILS
             </button>
           )}
         </div>

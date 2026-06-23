@@ -22,6 +22,16 @@ interface NumberInputProps {
 export function NumberInput({ value, onChange, min, max, step, emptyValue = 0, placeholder = '0', className = '' }: NumberInputProps) {
   const [text, setText] = useState(value ? String(value) : '');
 
+  // Resync the buffer when the controlled `value` changes from the outside (e.g. an
+  // auto-seed / regroup), without clobbering what the user is mid-typing. Adjusting
+  // state during render (guarded) is the React-blessed pattern — no effect needed.
+  const [lastValue, setLastValue] = useState(value);
+  if (value !== lastValue) {
+    setLastValue(value);
+    const parsed = text.trim() === '' ? emptyValue : Number(text);
+    if (parsed !== value) setText(value ? String(value) : '');
+  }
+
   const handle = (raw: string) => {
     setText(raw);
     if (raw.trim() === '') { onChange(emptyValue); return; }
