@@ -39,7 +39,7 @@ function MetaCell({ label, value }: { label: string; value: string }) {
 }
 
 function ItemRow({ li }: { li: LineItem }) {
-  const total = (Number(li.rate) || 0) * (Number(li.qty) || 0) * (Number(li.units) || 1);
+  const total = (Number(li.rate) || 0) * (Number(li.qty) || 0);
   return (
     <View style={styles.row} wrap={false}>
       <Text style={[styles.td, col.particular]}>{li.particular}</Text>
@@ -99,8 +99,8 @@ export function CostSheetPdf({ booking: b, items, grandTotal, byDay, notes, incl
           <View style={styles.thead} fixed>
             <Text style={[styles.th, col.particular]}>Particular</Text>
             <Text style={[styles.th, col.rate, styles.right]}>Rate</Text>
-            <Text style={[styles.th, col.qty, styles.right]}>No. of Guests / Units</Text>
-            <Text style={[styles.th, col.units, styles.right]}>No. of Nights / Units</Text>
+            <Text style={[styles.th, col.qty, styles.right]}>No. of Pax</Text>
+            <Text style={[styles.th, col.units, styles.right]}>No. of Rooms</Text>
             <Text style={[styles.th, col.total, styles.right]}>Total (₹)</Text>
           </View>
 

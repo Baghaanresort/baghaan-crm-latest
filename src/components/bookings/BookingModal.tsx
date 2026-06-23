@@ -6,13 +6,14 @@ import { toast } from 'sonner';
 import { createBooking, updateBooking } from '@/lib/actions/bookings';
 import { updateVoucher } from '@/lib/actions/vouchers';
 import { markEnquiryConverted } from '@/lib/actions/enquiries';
-import { ROOM_INVENTORY, DEFAULT_RATES, getRoomCategory } from '@/lib/constants/rooms';
+import { ROOM_INVENTORY } from '@/lib/constants/rooms';
 import { datesInRange, isoDate, daysBetween, todayISO, addDays } from '@/lib/utils/date';
 import { isValidPhone, PHONE_ERROR } from '@/lib/validations/phone';
 import { DateInput } from '@/components/ui/DateInput';
 import { NumberInput } from '@/components/ui/NumberInput';
 import { AddOnsEditor } from '@/components/bookings/AddOnsEditor';
-import { addOnsTotal } from '@/lib/utils/booking';
+import { RoomChargesEditor, seedRoomCharges } from '@/components/bookings/RoomChargesEditor';
+import { addOnsTotal, roomChargesTotal } from '@/lib/utils/booking';
 import type { Booking } from '@/lib/types/booking';
 
 interface Props {
@@ -48,10 +49,10 @@ export function BookingModal({ booking, users, currentUser, existingBookings, pr
       children: booking?.children ?? 0,
       rooms: booking?.rooms ?? ([] as string[]),
       rateBreakdown: booking?.rateBreakdown ?? '',
-      // Stored totalAmount is the grand total (package + add-ons). The field below edits
-      // the package portion, so back the add-ons out on load; they're re-added on save.
-      totalAmount: (booking?.totalAmount ?? 0) - addOnsTotal(booking?.addOns ?? []),
+      // Stored totalAmount is the grand total (room charges + add-ons); the field edits it directly.
+      totalAmount: booking?.totalAmount ?? 0,
       addOns: (booking?.addOns ?? []) as Booking['addOns'],
+      roomCharges: (booking?.roomCharges ?? []) as Booking['roomCharges'],
       advancePaid: booking?.advancePaid ?? 0,
       inclusions: booking?.inclusions ?? '',
       remarks: booking?.remarks ?? prefill?.remarks ?? '',
@@ -69,6 +70,8 @@ export function BookingModal({ booking, users, currentUser, existingBookings, pr
   // we treat the rate as user-owned and never auto-overwrite it. New bookings start
   // in auto mode so the tariff fills itself from the room selection.
   const [rateTouched, setRateTouched] = useState((booking?.totalAmount ?? 0) > 0);
+  // Room charges auto-seed from the selected rooms until the user edits them by hand.
+  const [roomTouched, setRoomTouched] = useState((booking?.roomCharges?.length ?? 0) > 0);
 
   const update = <K extends keyof typeof form>(k: K, v: typeof form[K]) =>
     setForm(f => ({ ...f, [k]: v }));
@@ -98,27 +101,27 @@ export function BookingModal({ booking, users, currentUser, existingBookings, pr
     }));
   };
 
-  // Suggested tariff from category rates × nights.
-  const autoTotal = form.rooms.reduce((s, r) => {
-    const cat = getRoomCategory(r);
-    return s + (cat !== 'Other' ? DEFAULT_RATES[cat] : 0);
-  }, 0) * nights;
-  const autoBreakdown = `${form.rooms.length} room(s) × ${nights} night(s) @ avg ₹${form.rooms.length > 0 ? Math.round(autoTotal / form.rooms.length / nights).toLocaleString('en-IN') : 0}/night`;
+  // Room charges itemised from the selected rooms (auto-seeded), still editable.
+  const autoRoomCharges = seedRoomCharges(form.rooms, nights);
+  const roomCharges = roomTouched ? form.roomCharges : autoRoomCharges;
+  const roomSum = roomChargesTotal(roomCharges);
 
-  // Until the user edits the total by hand, the displayed/saved values follow the
-  // auto calc. Derived in render — no effect, no synced state.
-  const displayTotal = rateTouched ? form.totalAmount : autoTotal;
-  const displayBreakdown = rateTouched ? form.rateBreakdown : autoBreakdown;
-
-  // Add-ons roll into the package total to form the grand total that gets saved.
+  // Add-ons roll in alongside the room charges to form the package total.
   const addOnsSum = addOnsTotal(form.addOns);
-  const grandTotal = displayTotal + addOnsSum;
+  const autoGrand = roomSum + addOnsSum;
+  const autoBreakdown =
+    roomCharges.map(r => `${r.numberOfRooms}× ${r.roomType || 'Room'} @ ₹${(Number(r.roomPrice) || 0).toLocaleString('en-IN')}`).join(' · ')
+    || `${form.rooms.length} room(s) × ${nights} night(s)`;
+
+  // Until the user overrides it, the total follows the auto sum. Derived in render.
+  const displayTotal = rateTouched ? form.totalAmount : autoGrand;
+  const displayBreakdown = rateTouched ? form.rateBreakdown : autoBreakdown;
 
   // First manual edit: commit the current auto values into state, then apply the edit
   // (so switching a custom breakdown doesn't wipe the total, and vice-versa).
   const enterManual = () => {
     if (!rateTouched) {
-      setForm(f => ({ ...f, totalAmount: autoTotal, rateBreakdown: autoBreakdown }));
+      setForm(f => ({ ...f, totalAmount: autoGrand, rateBreakdown: autoBreakdown }));
       setRateTouched(true);
     }
   };
@@ -137,8 +140,9 @@ export function BookingModal({ booking, users, currentUser, existingBookings, pr
     const payload = {
       ...form,
       nights,
-      totalAmount: grandTotal,
+      totalAmount: displayTotal,
       rateBreakdown: displayBreakdown,
+      roomCharges: roomCharges.filter(r => (Number(r.total) || 0) > 0 || r.roomType.trim() !== ''),
       addOns: form.addOns.filter(a => a.name.trim() !== '' || a.total > 0),
       bookingType: 'regular' as const,
     };
@@ -278,31 +282,33 @@ export function BookingModal({ booking, users, currentUser, existingBookings, pr
 
           {/* Financials */}
           <Section title="Financials">
-            <div className="grid grid-cols-3 gap-4">
+            <RoomChargesEditor value={roomCharges} onChange={rows => { setRoomTouched(true); update('roomCharges', rows); }} />
+            {!roomTouched && form.rooms.length > 0 && (
+              <p className="text-xs italic mt-1.5 text-stone-500">Auto-filled from the selected rooms — edit any cell to customise.</p>
+            )}
+
+            <div className="mt-4 pt-4 border-t border-stone-200">
+              <AddOnsEditor value={form.addOns} onChange={v => update('addOns', v)} />
+            </div>
+
+            <div className="grid grid-cols-3 gap-4 mt-4 pt-4 border-t border-stone-200">
               <Field label="Total Package Amount (₹)" type="number" value={displayTotal} onChange={v => { enterManual(); update('totalAmount', Number(v)); }} />
               <Field label="Advance Received (₹)" type="number" value={form.advancePaid} onChange={v => update('advancePaid', Number(v))} />
               <Field label="Rate Breakdown" value={displayBreakdown} onChange={v => { enterManual(); update('rateBreakdown', v); }} />
             </div>
-            <p className="text-xs italic mt-2 text-stone-500">
+            <div className="text-xs text-right text-stone-600 mt-2">
+              Room charges ₹{roomSum.toLocaleString('en-IN')}{addOnsSum > 0 ? ` + Add-ons ₹${addOnsSum.toLocaleString('en-IN')}` : ''} ={' '}
+              <strong className="text-stone-900">₹{autoGrand.toLocaleString('en-IN')}</strong>
+            </div>
+            <p className="text-xs italic mt-1 text-stone-500">
               {rateTouched ? (
-                <>Custom amount entered.{' '}
-                  <button type="button" onClick={resetToAuto} className="text-emerald-700 underline not-italic">
-                    ↻ Reset to auto-rate (₹{autoTotal.toLocaleString('en-IN')})
-                  </button>
+                <>Custom total entered.{' '}
+                  <button type="button" onClick={resetToAuto} className="text-emerald-700 underline not-italic">↻ Reset to auto (₹{autoGrand.toLocaleString('en-IN')})</button>
                 </>
               ) : (
-                <>Auto-calculated from selected rooms × nights — edit the amount to override.</>
+                <>Total auto-sums room charges + add-ons — edit the amount to override.</>
               )}
             </p>
-            <div className="mt-4 pt-4 border-t border-stone-200">
-              <AddOnsEditor value={form.addOns} onChange={v => update('addOns', v)} />
-            </div>
-            {addOnsSum > 0 && (
-              <div className="text-xs text-right text-stone-600 mt-2">
-                Package ₹{displayTotal.toLocaleString('en-IN')} + Add-ons ₹{addOnsSum.toLocaleString('en-IN')} ={' '}
-                <strong className="text-stone-900">Grand total ₹{grandTotal.toLocaleString('en-IN')}</strong>
-              </div>
-            )}
           </Section>
 
           {/* Inclusions & Notes */}

@@ -1,4 +1,4 @@
-import type { AddOn, Booking } from '@/lib/types/booking';
+import type { AddOn, RoomCharge, CheckInDetails, Booking } from '@/lib/types/booking';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function dbToBooking(row: Record<string, any>): Booking {
@@ -19,6 +19,8 @@ export function dbToBooking(row: Record<string, any>): Booking {
     rateBreakdown: (row['rate_breakdown'] as string | null) ?? '',
     totalAmount: Number(row['total_amount']),
     addOns: (row['add_ons'] as AddOn[] | null) ?? [],
+    roomCharges: (row['room_charges'] as RoomCharge[] | null) ?? [],
+    checkInDetails: (row['check_in_details'] as CheckInDetails | null) ?? null,
     advancePaid: Number(row['advance_paid']),
     inclusions: (row['inclusions'] as string | null) ?? '',
     remarks: (row['remarks'] as string | null) ?? '',
@@ -59,9 +61,11 @@ export function bookingToDb(b: Booking): Record<string, unknown> {
     rooms: b.rooms || [],
     rate_breakdown: b.rateBreakdown || '',
     total_amount: b.totalAmount || 0,
-    // No `?? []` fallback: a partial update that omits addOns leaves add_ons undefined,
+    // No `?? []` fallback: a partial update that omits these leaves the column undefined,
     // which updateBooking filters out so the existing list is preserved.
     add_ons: b.addOns,
+    room_charges: b.roomCharges,
+    check_in_details: b.checkInDetails,
     advance_paid: b.advancePaid || 0,
     inclusions: b.inclusions || '',
     remarks: b.remarks || '',

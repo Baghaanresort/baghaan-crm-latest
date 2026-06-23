@@ -48,10 +48,10 @@ export async function syncEnquiryStageFromPayment(
   // default to 'balance'/'btc_receipt' for same-day or past arrivals). Don't filter
   // by type, or a valid advance is invisible and the enquiry stays at rooms_blocked.
   const relevant = pays ?? [];
-  const hasVerified = relevant.some(p => p['verified'] === true);
+  // Verification removed: any recorded payment confirms the advance (no pending state).
   const hasAny = relevant.length > 0;
 
-  const stage = hasVerified ? 'advance_confirmed' : hasAny ? 'advance_pending' : 'rooms_blocked';
+  const stage = hasAny ? 'advance_confirmed' : 'rooms_blocked';
 
   await supabase
     .from('enquiries')

@@ -45,8 +45,8 @@ export async function runCorporateAutomation(
 
   const booking = dbToBooking(row);
   const { data: payRows } = await supabase.from('payments').select('*').eq('booking_id', bookingId);
+  // Verification removed: count all recorded payments toward the corporate advance/bill.
   const verifiedPaid = (payRows ?? []).map(dbToPayment)
-    .filter(p => p.verified)
     .reduce((s, p) => s + p.amount, 0);
 
   const advanceRequired = booking.proformaInvoice?.advanceRequired ?? 0;

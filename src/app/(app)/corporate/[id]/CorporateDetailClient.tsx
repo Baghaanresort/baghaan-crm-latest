@@ -49,6 +49,7 @@ export function CorporateDetailClient({ booking, payments, users, currentUser }:
   const [showPayment, setShowPayment] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
   const [showPI, setShowPI] = useState(false);
+  const [showPIDraft, setShowPIDraft] = useState(false);
   const [showLost, setShowLost] = useState(false);
   const [activity, setActivity] = useState<CorporateActivityEntry[] | null>(null);
 
@@ -102,7 +103,7 @@ export function CorporateDetailClient({ booking, payments, users, currentUser }:
       case 'inquiry': return { desc: 'Build the cost sheet to start quoting this deal.', btn: canEdit ? { label: 'Create Cost Sheet', on: open(setShowCostSheet) } : null };
       case 'cost_sheet_draft': return { desc: 'Cost sheet drafted. Send the quote to the client.', btn: canEdit ? { label: 'Send Quote', on: () => run(() => sendCostSheet(booking.id), 'Quote sent') } : null, alt: canEdit ? { label: 'Edit Cost Sheet', on: open(setShowCostSheet) } : null };
       case 'cost_sheet_sent': return { desc: 'Quote sent. Mark it accepted once the client agrees.', btn: canEdit ? { label: 'Mark Quote Accepted', on: () => run(() => markCostSheetAccepted(booking.id), 'Quote accepted') } : null, alt: canEdit ? { label: 'Revise Quote', on: open(setShowCostSheet) } : null };
-      case 'cost_sheet_accepted': return { desc: 'Quote accepted. Generate the Proforma Invoice to request the advance.', btn: canGenPI ? { label: 'Generate Proforma Invoice', on: () => run(() => generateProformaInvoice(booking.id), 'Proforma invoice generated') } : null };
+      case 'cost_sheet_accepted': return { desc: 'Quote accepted. Preview and generate the Proforma Invoice to request the advance.', btn: canGenPI ? { label: 'Generate Proforma Invoice', on: open(setShowPIDraft) } : null };
       case 'pi_generated': return {
         desc: `Advance of ${inr(ps.advanceRequired)} required. ${ps.advanceShortfall > 0 ? `${inr(ps.advanceShortfall)} still outstanding.` : 'Advance received — awaiting verification.'}`,
         btn: canSendLink ? { label: 'Send advance link', on: () => run(() => sendCorporateAdvanceRequest(booking.id), 'Advance payment link sent') } : (canPay ? { label: 'Record Advance Payment', on: open(setShowPayment) } : null),
@@ -270,7 +271,6 @@ export function CorporateDetailClient({ booking, payments, users, currentUser }:
                 <Money label="Taxes" value="Included" muted />
                 <Money label="Advance Required" value={inr(ps.advanceRequired)} />
                 <Money label="Advance Received" value={inr(ps.totalPaid)} tone={ps.totalPaid > 0 ? 'text-emerald-700' : 'text-stone-500'} />
-                {ps.totalUnverified > 0 && <Money label="Unverified" value={inr(ps.totalUnverified)} tone="text-amber-600" />}
                 <div className="border-t border-stone-200 pt-2.5">
                   <Money label="Outstanding" value={inr(Math.max(0, ps.balance))} tone={balanceTone} strong />
                 </div>
@@ -314,6 +314,15 @@ export function CorporateDetailClient({ booking, payments, users, currentUser }:
       {showPayment && <PaymentModal booking={booking} currentUser={currentUser} payments={payments} onClose={() => { setShowPayment(false); router.refresh(); }} />}
       {showEdit && <CorporateBookingModal booking={booking} users={users} currentUser={currentUser} existingBookings={[]} onClose={() => { setShowEdit(false); router.refresh(); }} />}
       {showPI && <ProformaInvoicePreview booking={booking} onClose={() => setShowPI(false)} />}
+      {showPIDraft && (
+        <ProformaInvoicePreview
+          booking={booking}
+          draft
+          confirming={isPending}
+          onConfirm={() => { run(() => generateProformaInvoice(booking.id), 'Proforma invoice generated'); setShowPIDraft(false); }}
+          onClose={() => setShowPIDraft(false)}
+        />
+      )}
       {showLost && <CorporateLostModal booking={booking} onClose={() => { setShowLost(false); router.refresh(); }} />}
     </div>
   );

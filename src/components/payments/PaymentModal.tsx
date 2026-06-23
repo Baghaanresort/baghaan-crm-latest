@@ -1,10 +1,10 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { X, CheckCircle2, ShieldCheck, Copy, ExternalLink } from 'lucide-react';
+import { X, CheckCircle2, Copy, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
 import { addPayment } from '@/lib/actions/payments';
-import { PAYMENT_MODES, FO_AUTO_VERIFY_MODES } from '@/lib/constants/payments';
+import { PAYMENT_MODES } from '@/lib/constants/payments';
 import { fmtDate, todayISO } from '@/lib/utils/date';
 import { fromPaise, formatINR } from '@/lib/utils/money';
 import { DateInput } from '@/components/ui/DateInput';
@@ -62,10 +62,8 @@ export function PaymentModal({ booking, currentUser, payments, paymentLinks = []
   const update = <K extends keyof typeof form>(k: K, v: typeof form[K]) =>
     setForm(f => ({ ...f, [k]: v }));
 
-  const isAutoVerified = currentUser.role === 'Front Office' && FO_AUTO_VERIFY_MODES.has(form.mode);
-
-  const totalPaid = payments.filter(p => p.verified).reduce((s, p) => s + p.amount, 0);
-  const totalUnverified = payments.filter(p => !p.verified).reduce((s, p) => s + p.amount, 0);
+  // Verification removed: every recorded payment counts toward the balance.
+  const totalPaid = payments.filter(p => p.type !== 'refund').reduce((s, p) => s + p.amount, 0);
   // For an enquiry hold the bill is the live total being typed, so balance / the
   // 50% & Full shortcuts stay correct as the total is entered.
   const billAmount = isEnquiryHold
@@ -100,7 +98,7 @@ export function PaymentModal({ booking, currentUser, payments, paymentLinks = []
         return;
       }
 
-      toast.success(`Payment recorded${isAutoVerified ? ' & auto-verified' : ' — pending verification'}`);
+      toast.success('Payment recorded');
       onClose();
     });
   };
@@ -120,15 +118,9 @@ export function PaymentModal({ booking, currentUser, payments, paymentLinks = []
           {/* Summary */}
           <div className="bg-stone-100 px-4 py-3 grid grid-cols-3 gap-4 text-sm">
             <div><div className="text-xs text-stone-500 uppercase tracking-wider">Bill Amount</div><div className="font-medium">₹{billAmount.toLocaleString('en-IN')}</div></div>
-            <div><div className="text-xs text-stone-500 uppercase tracking-wider">Verified Paid</div><div className="font-medium text-emerald-700">₹{totalPaid.toLocaleString('en-IN')}</div></div>
+            <div><div className="text-xs text-stone-500 uppercase tracking-wider">Paid</div><div className="font-medium text-emerald-700">₹{totalPaid.toLocaleString('en-IN')}</div></div>
             <div><div className="text-xs text-stone-500 uppercase tracking-wider">Balance Due</div><div className={`font-medium ${balance > 0 ? 'text-red-700' : 'text-emerald-700'}`}>₹{Math.abs(balance).toLocaleString('en-IN')}{balance < 0 ? ' CR' : ''}</div></div>
           </div>
-
-          {totalUnverified > 0 && (
-            <div className="bg-purple-50 border border-purple-200 px-3 py-2 text-xs text-purple-800">
-              ₹{totalUnverified.toLocaleString('en-IN')} pending verification — not counted in balance above
-            </div>
-          )}
 
           {/* Enquiry holds may have been blocked without a quote — capture the package total here. */}
           {isEnquiryHold && (
@@ -178,13 +170,10 @@ export function PaymentModal({ booking, currentUser, payments, paymentLinks = []
             <textarea value={form.notes} onChange={e => update('notes', e.target.value)} rows={2} className="w-full px-3 py-2 border border-stone-300 text-sm outline-none focus:border-emerald-700 bg-white" />
           </div>
 
-          <div className={`border-l-4 p-3 ${isAutoVerified ? 'bg-emerald-50 border-emerald-500' : 'bg-purple-50 border-purple-500'}`}>
+          <div className="border-l-4 p-3 bg-emerald-50 border-emerald-500">
             <div className="text-xs flex items-center gap-2">
-              {isAutoVerified ? (
-                <><CheckCircle2 size={14} className="text-emerald-700" /><span className="text-emerald-900"><strong>Auto-verified:</strong> {form.mode} collected at front office is treated as immediately verified.</span></>
-              ) : (
-                <><ShieldCheck size={14} className="text-purple-700" /><span className="text-purple-900"><strong>Pending verification:</strong> Accounts will reconcile against the bank statement before this payment counts towards balance due.</span></>
-              )}
+              <CheckCircle2 size={14} className="text-emerald-700" />
+              <span className="text-emerald-900">This payment counts toward the balance immediately on recording.</span>
             </div>
           </div>
 
@@ -260,7 +249,7 @@ export function PaymentModal({ booking, currentUser, payments, paymentLinks = []
           <div className="flex justify-end gap-3 pt-4 border-t border-stone-300">
             <button onClick={onClose} className="px-5 py-2.5 text-sm border border-stone-300 hover:bg-stone-100 transition tracking-wider">CANCEL</button>
             <button onClick={handleSubmit} disabled={isPending} className="px-6 py-2.5 text-sm bg-emerald-900 hover:bg-emerald-800 text-amber-100 transition tracking-wider disabled:opacity-50">
-              {isPending ? 'SAVING…' : isAutoVerified ? 'RECORD & VERIFY' : 'RECORD PAYMENT'}
+              {isPending ? 'SAVING…' : 'RECORD PAYMENT'}
             </button>
           </div>
         </div>

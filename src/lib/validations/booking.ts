@@ -8,6 +8,23 @@ export const AddOnSchema = z.object({
   total: z.number().min(0).default(0),
 });
 
+export const RoomChargeSchema = z.object({
+  roomType: z.string().default(''),
+  roomPrice: z.number().min(0).default(0),
+  numberOfRooms: z.number().min(0).default(0),
+  total: z.number().min(0).default(0),
+});
+
+export const CheckInDetailsSchema = z.object({
+  adults: z.number().int().min(0).default(0),
+  childBelow6: z.number().int().min(0).default(0),
+  child6to12: z.number().int().min(0).default(0),
+  child12to18: z.number().int().min(0).default(0),
+  roomsAssigned: z.number().int().min(0).default(0),
+  roomNumbers: z.array(z.string()).default([]),
+});
+export type CheckInDetailsInput = z.infer<typeof CheckInDetailsSchema>;
+
 export const BookingSchema = z
   .object({
     guestName: z.string().min(1, 'Guest name is required'),
@@ -23,6 +40,7 @@ export const BookingSchema = z
     rooms: z.array(z.string()).min(1, 'Select at least one room'),
     totalAmount: z.number().min(0),
     addOns: z.array(AddOnSchema).optional().default([]),
+    roomCharges: z.array(RoomChargeSchema).optional().default([]),
     advancePaid: z.number().min(0),
     rateBreakdown: z.string().optional().default(''),
     inclusions: z.string().optional().default(''),
@@ -73,6 +91,7 @@ export const BlockRoomSchema = z
     rooms: z.array(z.string()).min(1, 'Select at least one room to block'),
     quotedAmount: z.number().min(0).optional().default(0),
     addOns: z.array(AddOnSchema).optional().default([]),
+    roomCharges: z.array(RoomChargeSchema).optional().default([]),
     notes: z.string().optional().default(''),
     createdBy: z.string().min(1),
     holdExpiresAt: z.string().nullable().optional(),

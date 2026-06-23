@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { ok, err, type ActionResult } from '@/lib/types/result';
-import { BookingSchema, FinalBillSchema, BlockRoomSchema } from '@/lib/validations/booking';
+import { BookingSchema, FinalBillSchema, BlockRoomSchema, CheckInDetailsSchema, type CheckInDetailsInput } from '@/lib/validations/booking';
 import { bookingToDb, dbToBooking } from '@/lib/mappers/booking';
 import { generateConfirmationNumber } from '@/lib/utils/booking';
 import { checkRoomConflict } from '@/lib/utils/conflict';
@@ -163,6 +163,8 @@ export async function createBlockedRoom(
     rateBreakdown: '',
     totalAmount: parsed.data.quotedAmount ?? 0,
     addOns: parsed.data.addOns ?? [],
+    roomCharges: parsed.data.roomCharges ?? [],
+    checkInDetails: null,
     advancePaid: 0,
     inclusions: '',
     remarks: parsed.data.notes ?? '',
@@ -321,13 +323,16 @@ export async function cancelBooking(bookingId: string): Promise<ActionResult> {
 // Front Office marks an arriving guest as physically checked in. This is what
 // drives the In-House list (status-based), not date math. Allowed once the
 // arrival date has come.
-export async function checkInBooking(bookingId: string): Promise<ActionResult> {
+export async function checkInBooking(bookingId: string, details?: CheckInDetailsInput): Promise<ActionResult> {
   if (!bookingId) return err('Booking ID required');
 
   const supabase = await createClient();
   const actor = await getAuthedUser(supabase);
   if (!actor) return err('Not authenticated');
   if (!['Front Office', 'Admin'].includes(actor.role)) return err('Only Front Office and Admin can check guests in');
+
+  const parsed = CheckInDetailsSchema.safeParse(details ?? {});
+  if (!parsed.success) return err('Invalid check-in details.');
 
   const { data: current } = await supabase
     .from('bookings').select('status, arrival').eq('id', bookingId).single();
@@ -338,12 +343,13 @@ export async function checkInBooking(bookingId: string): Promise<ActionResult> {
   if ((current['arrival'] as string) > todayISO()) return err('Cannot check in before the arrival date.');
 
   const now = new Date().toISOString();
-  const { error } = await supabase.from('bookings').update({ status: 'checked_in' }).eq('id', bookingId);
+  const { error } = await supabase.from('bookings')
+    .update({ status: 'checked_in', check_in_details: parsed.data }).eq('id', bookingId);
   if (error) { console.error('[checkInBooking]', error); return err('Failed to check in.'); }
 
   await supabase.from('booking_history').insert({
     id: `BH-${Date.now()}`, booking_id: bookingId, changed_by: actor.name, changed_at: now,
-    changes: { status: { from: current['status'], to: 'checked_in' } },
+    changes: { status: { from: current['status'], to: 'checked_in' }, checkIn: parsed.data },
   }).then(({ error: hErr }) => { if (hErr) console.error('[booking_history]', hErr); });
 
   revalidateAll();

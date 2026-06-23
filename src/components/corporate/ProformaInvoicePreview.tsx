@@ -4,15 +4,32 @@ import { Fragment } from 'react';
 import { X, Printer } from 'lucide-react';
 import { fmtDate, datesInRange } from '@/lib/utils/date';
 import { BILLING_ENTITIES } from '@/lib/constants/billing';
-import type { Booking } from '@/lib/types/booking';
+import type { Booking, ProformaInvoice } from '@/lib/types/booking';
 
 interface Props {
   booking: Booking;
   onClose: () => void;
+  draft?: boolean;
+  onConfirm?: () => void;
+  confirming?: boolean;
 }
 
-export function ProformaInvoicePreview({ booking, onClose }: Props) {
-  const pi = booking.proformaInvoice;
+export function ProformaInvoicePreview({ booking, onClose, draft = false, onConfirm, confirming = false }: Props) {
+  // Draft mode builds the PI client-side from the cost sheet for review — only persisted on confirm.
+  const grand = Number(booking.costSheet?.grandTotal ?? 0);
+  const draftPi: ProformaInvoice | null = draft && booking.costSheet?.lineItems?.length
+    ? {
+        piNumber: 'DRAFT',
+        generatedAt: new Date().toISOString(),
+        generatedBy: '',
+        lineItems: booking.costSheet.lineItems,
+        grandTotal: grand,
+        advanceRequired: Math.round(grand * 0.5),
+        paymentTerms: '50% advance to confirm booking. Balance to be paid before checkout.',
+        billingEntity: 'baghaan',
+      }
+    : null;
+  const pi = draftPi ?? booking.proformaInvoice;
   if (!pi) return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-white p-6 max-w-md">
@@ -37,9 +54,13 @@ export function ProformaInvoicePreview({ booking, onClose }: Props) {
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 overflow-y-auto">
       <div className="bg-white max-w-3xl w-full my-8">
         <div className="sticky top-0 bg-purple-700 text-white px-6 py-4 flex justify-between items-center z-10">
-          <div><h2 style={{ fontFamily: "'Cormorant Garamond', serif", fontWeight: 600 }} className="text-xl tracking-wider">Proforma Invoice</h2><p className="text-xs text-purple-100 font-mono">{pi.piNumber}</p></div>
+          <div><h2 style={{ fontFamily: "'Cormorant Garamond', serif", fontWeight: 600 }} className="text-xl tracking-wider">Proforma Invoice{draft ? ' — Draft' : ''}</h2><p className="text-xs text-purple-100 font-mono">{draft ? 'Preview · not yet generated' : pi.piNumber}</p></div>
           <div className="flex gap-3">
-            <button onClick={handlePrint} className="bg-amber-600 hover:bg-amber-700 text-white px-4 py-1.5 text-sm flex items-center gap-2"><Printer size={14} /> PRINT / SAVE PDF</button>
+            {draft ? (
+              <button onClick={onConfirm} disabled={confirming} className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-1.5 text-sm flex items-center gap-2 disabled:opacity-50 tracking-wider">{confirming ? 'GENERATING…' : 'GENERATE PI'}</button>
+            ) : (
+              <button onClick={handlePrint} className="bg-amber-600 hover:bg-amber-700 text-white px-4 py-1.5 text-sm flex items-center gap-2"><Printer size={14} /> PRINT / SAVE PDF</button>
+            )}
             <button onClick={onClose} className="hover:bg-purple-800 p-1.5 rounded"><X size={18} /></button>
           </div>
         </div>
@@ -73,7 +94,7 @@ export function ProformaInvoicePreview({ booking, onClose }: Props) {
           {/* Line items table */}
           <table className="w-full text-sm border border-stone-200 mt-3">
             <thead className="bg-emerald-900 text-amber-100">
-              <tr><th className="text-left p-2 text-xs uppercase tracking-wider">Particulars</th><th className="text-right p-2 text-xs uppercase">Rate</th><th className="text-right p-2 text-xs uppercase">No./Units</th><th className="text-right p-2 text-xs uppercase">Total (₹)</th></tr>
+              <tr><th className="text-left p-2 text-xs uppercase tracking-wider">Particulars</th><th className="text-right p-2 text-xs uppercase">Rate</th><th className="text-right p-2 text-xs uppercase">No. of Pax</th><th className="text-right p-2 text-xs uppercase">Total (₹)</th></tr>
             </thead>
             <tbody>
               {stayDays.map(day => {
@@ -82,10 +103,10 @@ export function ProformaInvoicePreview({ booking, onClose }: Props) {
                 return (
                   <Fragment key={`day-${day}`}>
                     <tr className="bg-amber-50"><td colSpan={4} className="p-2 text-xs uppercase tracking-wider font-medium text-amber-900">{fmtDate(day)}</td></tr>
-                    {di.map((li, j) => { const t = Number(li.rate ?? 0) * Number(li.qty ?? 1) * Number(li.units ?? 1); return (
+                    {di.map((li, j) => { const t = Number(li.rate ?? 0) * Number(li.qty ?? 1); return (
                       <tr key={`${day}-${j}`} className="border-t border-stone-100">
                         <td className="p-2">{li.particular}</td><td className="p-2 text-right">{Number(li.rate).toLocaleString('en-IN')}</td>
-                        <td className="p-2 text-right">{li.qty}{li.units > 1 ? ` × ${li.units}` : ''}</td><td className="p-2 text-right">{t.toLocaleString('en-IN')}</td>
+                        <td className="p-2 text-right">{li.qty}</td><td className="p-2 text-right">{t.toLocaleString('en-IN')}</td>
                       </tr>
                     ); })}
                   </Fragment>
@@ -94,8 +115,8 @@ export function ProformaInvoicePreview({ booking, onClose }: Props) {
               {(ibd['multi'] ?? []).length > 0 && (
                 <>
                   <tr className="bg-amber-50"><td colSpan={4} className="p-2 text-xs uppercase tracking-wider font-medium text-amber-900">Multi-Day / Equipment</td></tr>
-                  {(ibd['multi'] ?? []).map((li, j) => { const t = Number(li.rate ?? 0) * Number(li.qty ?? 1) * Number(li.units ?? 1); return (
-                    <tr key={`multi-${j}`} className="border-t border-stone-100"><td className="p-2">{li.particular}</td><td className="p-2 text-right">{Number(li.rate).toLocaleString('en-IN')}</td><td className="p-2 text-right">{li.qty}{li.units > 1 ? ` × ${li.units}` : ''}</td><td className="p-2 text-right">{t.toLocaleString('en-IN')}</td></tr>
+                  {(ibd['multi'] ?? []).map((li, j) => { const t = Number(li.rate ?? 0) * Number(li.qty ?? 1); return (
+                    <tr key={`multi-${j}`} className="border-t border-stone-100"><td className="p-2">{li.particular}</td><td className="p-2 text-right">{Number(li.rate).toLocaleString('en-IN')}</td><td className="p-2 text-right">{li.qty}</td><td className="p-2 text-right">{t.toLocaleString('en-IN')}</td></tr>
                   ); })}
                 </>
               )}

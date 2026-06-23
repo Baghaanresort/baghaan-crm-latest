@@ -18,7 +18,7 @@ export const ROLE_COLORS: Record<UserRole, string> = {
 
 export const DEFAULT_TAB_BY_ROLE: Partial<Record<UserRole, string>> = {
   'Front Office': 'front-office',
-  'Accounts': 'accounts',
+  // Accounts now lands on the Dashboard (which carries the Accounts KPIs).
   'Housekeeping': 'front-office',
   'Kitchen': 'bookings',
   'F&B': 'bookings',
@@ -28,7 +28,7 @@ export const ROLE_SUBTITLE: Record<UserRole, string> = {
   'Sales': 'Bookings, holds and your sales pipeline',
   'Sales Admin': 'Approve cancellations & postponements, plus full sales access',
   'Front Office': "Today's arrivals, in-house guests and check-outs",
-  'Accounts': 'Payment verification and receivables',
+  'Accounts': 'Advance payments, resort collections & receivables',
   'Admin': 'Full operations overview',
   'Central Store': "Today's occupancy — plan inventory and supplies",
   'Purchase': "Today's occupancy — plan procurement",

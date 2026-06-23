@@ -201,7 +201,7 @@ export function buildCostSheetHTML({
     daySections += `<tr class="day-header"><td colspan="5">DAY ${idx + 1} — ${fmtDate(day)}</td></tr>`;
     daySections += dayItems
       .map((li) => {
-        const t = Number(li.rate ?? 0) * Number(li.qty ?? 0) * Number(li.units ?? 1);
+        const t = Number(li.rate ?? 0) * Number(li.qty ?? 0);
         return `<tr><td>${esc(li.particular)}</td><td class="r">${Number(li.rate).toLocaleString('en-IN')}</td><td class="r">${li.qty}</td><td class="r">${li.units}</td><td class="r">${t.toLocaleString('en-IN')}</td></tr>`;
       })
       .join('');
@@ -212,7 +212,7 @@ export function buildCostSheetHTML({
     daySections += `<tr class="day-header"><td colspan="5">MULTI-DAY / EQUIPMENT</td></tr>`;
     daySections += (itemsByDay['multi'] ?? [])
       .map((li) => {
-        const t = Number(li.rate ?? 0) * Number(li.qty ?? 0) * Number(li.units ?? 1);
+        const t = Number(li.rate ?? 0) * Number(li.qty ?? 0);
         return `<tr><td>${esc(li.particular)}</td><td class="r">${Number(li.rate).toLocaleString('en-IN')}</td><td class="r">${li.qty}</td><td class="r">${li.units}</td><td class="r">${t.toLocaleString('en-IN')}</td></tr>`;
       })
       .join('');
@@ -228,7 +228,7 @@ export function buildCostSheetHTML({
 <h2>Corporate / Group Cost Estimation</h2>
 <div class="event-meta"><strong>${esc(b.companyName || '')}</strong>${b.companyAddress ? ' · ' + esc(b.companyAddress) : ''}<br/>Contact: ${esc(b.contactName || '')}${b.contactNumber ? ' · ' + esc(b.contactNumber) : ''}${b.companyGST ? ' · GST: ' + esc(b.companyGST) : ''}</div>
 <div class="meta-grid"><div><div class="lbl">Check In</div>${fmtDate(b.arrival)} · 02:00 PM</div><div><div class="lbl">Check Out</div>${fmtDate(b.departure)} · 11:00 AM</div><div><div class="lbl">Nights</div>${b.nights}</div><div><div class="lbl">Total Guests</div>${tg} pax</div><div><div class="lbl">Single Share</div>${gc.single || 0} guests</div><div><div class="lbl">Double Share</div>${gc.double || 0} guests</div><div><div class="lbl">Triple Share</div>${gc.triple || 0} guests</div><div><div class="lbl">Rooms</div>${b.rooms?.length || 0}</div></div>
-<table class="lines"><thead><tr><th>Particular</th><th class="r">Rate</th><th class="r">No. of Guests / Units</th><th class="r">No. of Nights / Units</th><th class="r">Total (₹)</th></tr></thead><tbody>${daySections}</tbody></table>
+<table class="lines"><thead><tr><th>Particular</th><th class="r">Rate</th><th class="r">No. of Pax</th><th class="r">No. of Rooms</th><th class="r">Total (₹)</th></tr></thead><tbody>${daySections}</tbody></table>
 <div class="grand"><div><div class="label">Grand Total</div><div class="words">${numberToIndianWords(grandTotal)} rupees</div></div><div class="amount">₹${grandTotal.toLocaleString('en-IN')}</div></div>
 <div class="two-col"><div class="footer-section"><h3>Notes</h3><p>${notes.split('\n').map((l) => esc(l.trim())).filter(Boolean).join('<br/>')}</p></div><div class="footer-section"><h3>Activities Included (free)</h3><p>${inclusions.map(esc).join(' · ')}</p></div></div>
 <div class="footer-section"><h3>Terms &amp; Conditions</h3><p>${esc(terms)}</p></div>
@@ -256,16 +256,16 @@ export function buildPIHTML(
     if (!di.length) return;
     rows += `<tr class="day-header"><td colspan="4">${fmtDate(day)}</td></tr>`;
     di.forEach((li) => {
-      const t = Number(li.rate ?? 0) * Number(li.qty ?? 0) * Number(li.units ?? 1);
-      rows += `<tr><td>${esc(li.particular)}</td><td class="r">${Number(li.rate).toLocaleString('en-IN')}</td><td class="r">${li.qty}${li.units > 1 ? ' × ' + li.units : ''}</td><td class="r">${t.toLocaleString('en-IN')}</td></tr>`;
+      const t = Number(li.rate ?? 0) * Number(li.qty ?? 0);
+      rows += `<tr><td>${esc(li.particular)}</td><td class="r">${Number(li.rate).toLocaleString('en-IN')}</td><td class="r">${li.qty}</td><td class="r">${t.toLocaleString('en-IN')}</td></tr>`;
     });
   });
 
   if ((ibd['multi'] ?? []).length > 0) {
     rows += `<tr class="day-header"><td colspan="4">Multi-Day / Equipment</td></tr>`;
     (ibd['multi'] ?? []).forEach((li) => {
-      const t = Number(li.rate ?? 0) * Number(li.qty ?? 0) * Number(li.units ?? 1);
-      rows += `<tr><td>${esc(li.particular)}</td><td class="r">${Number(li.rate).toLocaleString('en-IN')}</td><td class="r">${li.qty}${li.units > 1 ? ' × ' + li.units : ''}</td><td class="r">${t.toLocaleString('en-IN')}</td></tr>`;
+      const t = Number(li.rate ?? 0) * Number(li.qty ?? 0);
+      rows += `<tr><td>${esc(li.particular)}</td><td class="r">${Number(li.rate).toLocaleString('en-IN')}</td><td class="r">${li.qty}</td><td class="r">${t.toLocaleString('en-IN')}</td></tr>`;
     });
   }
 
@@ -277,7 +277,7 @@ export function buildPIHTML(
   <div><div class="lbl">Billed To</div><div style="font-weight:500;margin-top:2px;">${esc(b.companyName || '')}</div>${b.companyAddress ? `<div>${esc(b.companyAddress)}</div>` : ''} ${b.companyGST ? `<div style="color:#57534e;">GST: ${esc(b.companyGST)}</div>` : ''}<div style="color:#57534e;margin-top:3px;">Contact: ${esc(b.contactName || '')} · ${esc(b.contactNumber || '')}</div></div>
   <div style="text-align:right;"><div class="lbl">Proforma Invoice No.</div><div style="font-family:monospace;font-weight:500;margin-top:2px;">${pi.piNumber}</div><div style="color:#57534e;margin-top:5px;">Date: ${fmtDate(pi.generatedAt)}</div><div style="color:#57534e;">Check In: ${fmtDate(b.arrival)} · 02:00 PM</div><div style="color:#57534e;">Check Out: ${fmtDate(b.departure)} · 11:00 AM</div><div style="color:#57534e;">Nights: ${b.nights}</div></div>
 </div>
-<table class="lines"><thead><tr><th>Particulars</th><th class="r">Rate</th><th class="r">No. / Units</th><th class="r">Total (₹)</th></tr></thead>
+<table class="lines"><thead><tr><th>Particulars</th><th class="r">Rate</th><th class="r">No. of Pax</th><th class="r">Total (₹)</th></tr></thead>
 <tbody>${rows}<tr class="total-row"><td colspan="3">GRAND TOTAL</td><td class="r">₹${Number(pi.grandTotal).toLocaleString('en-IN')}</td></tr><tr class="words-row"><td colspan="4">Rupees ${numberToIndianWords(pi.grandTotal)}</td></tr></tbody></table>
 <div class="payment-box"><h3>Payment Terms</h3><table><tr><td>Advance Required (50%)</td><td class="r">₹${Number(pi.advanceRequired).toLocaleString('en-IN')}</td></tr><tr><td>Balance (before checkout)</td><td class="r">₹${balance.toLocaleString('en-IN')}</td></tr></table><p style="margin:5px 0 0;">${esc(pi.paymentTerms || '50% advance to confirm booking. Balance to be paid before checkout.')}</p></div>
 <div class="bank-box"><h3>Bank Details</h3><table><tr><td>Payable to</td><td style="font-weight:500;">${entity.payeeName}</td></tr><tr><td>Bank</td><td>${entity.bank.name}</td></tr><tr><td>Branch</td><td>${entity.bank.branch}</td></tr><tr><td>Account Type</td><td>${entity.bank.accountType}</td></tr><tr><td>Account No.</td><td style="font-family:monospace;">${entity.bank.accountNo}</td></tr><tr><td>IFSC</td><td style="font-family:monospace;">${entity.bank.ifsc}</td></tr></table></div>

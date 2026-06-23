@@ -314,6 +314,7 @@ export async function blockEnquiryRooms(
     rooms: parsed.data.rooms,
     quotedAmount: parsed.data.quotedAmount ?? 0,
     addOns: parsed.data.addOns ?? [],
+    roomCharges: parsed.data.roomCharges ?? [],
     notes: parsed.data.notes ?? '',
     createdBy: actor.name,
     holdExpiresAt: parsed.data.holdExpiresAt ?? null,
