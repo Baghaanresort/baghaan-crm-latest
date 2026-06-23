@@ -245,7 +245,7 @@ export function EnquiriesClient({ initialEnquiries, heldBookings, activeBookings
       {/* Status pill tabs + search/filter row */}
       <div className="mb-4 space-y-3">
         <div className="flex gap-1.5 flex-wrap">
-          {([['all', 'All'], ...Object.entries(ENQUIRY_STATUSES).map(([k, v]) => [k, v.label])] as [string, string][]).map(([key, label]) => {
+          {([['all', 'All'], ...Object.entries(ENQUIRY_STATUSES).filter(([k]) => k !== 'advance_pending').map(([k, v]) => [k, v.label])] as [string, string][]).map(([key, label]) => {
             const pill = PILL_STYLES[key] ?? PILL_STYLES.all!;
             const isActive = filterStatus === key;
             return (

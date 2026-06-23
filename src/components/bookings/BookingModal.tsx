@@ -54,6 +54,7 @@ export function BookingModal({ booking, users, currentUser, existingBookings, pr
       addOns: (booking?.addOns ?? []) as Booking['addOns'],
       roomCharges: (booking?.roomCharges ?? []) as Booking['roomCharges'],
       advancePaid: booking?.advancePaid ?? 0,
+      advanceRequired: booking?.advanceRequired ?? 0,
       inclusions: booking?.inclusions ?? '',
       remarks: booking?.remarks ?? prefill?.remarks ?? '',
       specialRequests: booking?.specialRequests ?? '',
@@ -144,7 +145,7 @@ export function BookingModal({ booking, users, currentUser, existingBookings, pr
       rateBreakdown: displayBreakdown,
       roomCharges: roomCharges.filter(r => (Number(r.total) || 0) > 0 || r.roomType.trim() !== ''),
       addOns: form.addOns.filter(a => a.name.trim() !== '' || a.total > 0),
-      advanceRequired: 0,
+      advanceRequired: form.status === 'hold' ? Math.max(0, form.advanceRequired || 0) : 0,
       bookingType: 'regular' as const,
     };
 
@@ -296,6 +297,9 @@ export function BookingModal({ booking, users, currentUser, existingBookings, pr
               <Field label="Total Package Amount (₹)" type="number" value={displayTotal} onChange={v => { enterManual(); update('totalAmount', Number(v)); }} />
               <Field label="Advance Received (₹)" type="number" value={form.advancePaid} onChange={v => update('advancePaid', Number(v))} />
               <Field label="Rate Breakdown" value={displayBreakdown} onChange={v => { enterManual(); update('rateBreakdown', v); }} />
+              {form.status === 'hold' && (
+                <Field label="Advance to be Paid (₹)" type="number" value={form.advanceRequired} onChange={v => update('advanceRequired', Number(v))} />
+              )}
             </div>
             <div className="text-xs text-right text-stone-600 mt-2">
               Room charges ₹{roomSum.toLocaleString('en-IN')}{addOnsSum > 0 ? ` + Add-ons ₹${addOnsSum.toLocaleString('en-IN')}` : ''} ={' '}
