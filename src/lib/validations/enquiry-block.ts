@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { AddOnSchema } from './booking';
+import { AddOnSchema, RoomChargeSchema } from './booking';
 
 export const EnquiryBlockSchema = z
   .object({
@@ -11,6 +11,7 @@ export const EnquiryBlockSchema = z
     rooms: z.array(z.string()).min(1, 'Select at least one room to block'),
     quotedAmount: z.number().min(0).optional().default(0),
     addOns: z.array(AddOnSchema).optional().default([]),
+    roomCharges: z.array(RoomChargeSchema).optional().default([]),
     notes: z.string().optional().default(''),
     holdExpiresAt: z.string().nullable().optional(),
   })

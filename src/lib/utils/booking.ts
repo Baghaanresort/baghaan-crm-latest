@@ -1,9 +1,14 @@
-import type { AddOn, Booking, BookingPaymentStatus, EffectiveStatus } from '@/lib/types/booking';
+import type { AddOn, RoomCharge, Booking, BookingPaymentStatus, EffectiveStatus } from '@/lib/types/booking';
 import type { Payment } from '@/lib/types/payment';
 
 // Sum of every add-on line's total. Add-ons roll into a booking's package total.
 export function addOnsTotal(addOns: AddOn[] | null | undefined): number {
   return (addOns ?? []).reduce((s, a) => s + (Number(a.total) || 0), 0);
+}
+
+// Sum of every room-charge line's total (Room Price × No. of Rooms).
+export function roomChargesTotal(rows: RoomCharge[] | null | undefined): number {
+  return (rows ?? []).reduce((s, r) => s + (Number(r.total) || 0), 0);
 }
 
 export function getEffectiveStatus(booking: Booking, payments: Payment[]): EffectiveStatus {

@@ -163,6 +163,7 @@ export async function createBlockedRoom(
     rateBreakdown: '',
     totalAmount: parsed.data.quotedAmount ?? 0,
     addOns: parsed.data.addOns ?? [],
+    roomCharges: parsed.data.roomCharges ?? [],
     advancePaid: 0,
     inclusions: '',
     remarks: parsed.data.notes ?? '',

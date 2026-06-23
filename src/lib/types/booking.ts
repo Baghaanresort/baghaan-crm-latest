@@ -26,6 +26,13 @@ export interface AddOn {
   total: number;
 }
 
+export interface RoomCharge {
+  roomType: string;
+  roomPrice: number;
+  numberOfRooms: number;
+  total: number;
+}
+
 export interface LineItem {
   day: string;
   dayLabel: string;
@@ -92,6 +99,7 @@ export interface Booking {
   rateBreakdown: string;
   totalAmount: number;
   addOns: AddOn[];
+  roomCharges: RoomCharge[];
   advancePaid: number;
   inclusions: string;
   remarks: string;
