@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
   const byDay: Record<string, number> = {};
   items.forEach(li => {
     const k = li.day || 'multi';
-    byDay[k] = (byDay[k] ?? 0) + li.rate * li.qty * li.units;
+    byDay[k] = (byDay[k] ?? 0) + li.rate * li.qty;
   });
 
   const html = buildCostSheetHTML({

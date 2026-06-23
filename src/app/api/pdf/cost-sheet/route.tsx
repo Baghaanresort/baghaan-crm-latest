@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
   const byDay: Record<string, number> = {};
   items.forEach(li => {
     const k = li.day || 'multi';
-    byDay[k] = (byDay[k] ?? 0) + (Number(li.rate) || 0) * (Number(li.qty) || 0) * (Number(li.units) || 1);
+    byDay[k] = (byDay[k] ?? 0) + (Number(li.rate) || 0) * (Number(li.qty) || 0);
   });
 
   try {

@@ -26,7 +26,7 @@ export function CostSheetModal({ booking, currentUser, onClose }: Props) {
   const stayDays = useMemo(() => datesInRange(booking.arrival, booking.departure), [booking.arrival, booking.departure]);
 
   const [items, setItems] = useState<EditLineItem[]>(() =>
-    (booking.costSheet?.lineItems ?? []).map(li => ({ ...li, _id: `${Math.random()}`, total: li.rate * li.qty * li.units }))
+    (booking.costSheet?.lineItems ?? []).map(li => ({ ...li, _id: `${Math.random()}`, total: li.rate * li.qty }))
   );
   const [notes, setNotes] = useState(booking.costSheet?.notes ?? '');
   const [inclusions, setInclusions] = useState<string[]>(booking.costSheet?.inclusions ?? [
@@ -39,7 +39,7 @@ export function CostSheetModal({ booking, currentUser, onClose }: Props) {
     const m: Record<string, number> = {};
     items.forEach(li => {
       const k = li.day || 'multi';
-      m[k] = (m[k] ?? 0) + Number(li.rate ?? 0) * Number(li.qty ?? 1) * Number(li.units ?? 1);
+      m[k] = (m[k] ?? 0) + Number(li.rate ?? 0) * Number(li.qty ?? 1);
     });
     return m;
   }, [items]);
@@ -50,7 +50,7 @@ export function CostSheetModal({ booking, currentUser, onClose }: Props) {
     setItems(prev => prev.map(li => {
       if (li._id !== id) return li;
       const updated = { ...li, [field]: field === 'rate' || field === 'qty' || field === 'units' ? Number(value) : value };
-      updated.total = Number(updated.rate ?? 0) * Number(updated.qty ?? 1) * Number(updated.units ?? 1);
+      updated.total = Number(updated.rate ?? 0) * Number(updated.qty ?? 1);
       return updated;
     }));
   };
@@ -74,7 +74,7 @@ export function CostSheetModal({ booking, currentUser, onClose }: Props) {
       rate: Number(li.rate ?? 0),
       qty: Number(li.qty ?? 1),
       units: Number(li.units ?? 1),
-      total: Number(li.rate ?? 0) * Number(li.qty ?? 1) * Number(li.units ?? 1),
+      total: Number(li.rate ?? 0) * Number(li.qty ?? 1),
       category: li.category,
     }));
 
@@ -135,7 +135,7 @@ export function CostSheetModal({ booking, currentUser, onClose }: Props) {
                 ) : (
                   <table className="w-full text-sm">
                     <thead className="bg-stone-50 text-xs text-stone-600 uppercase">
-                      <tr><th className="text-left p-2 w-2/5">Particular</th><th className="text-right p-2 w-20">Rate (₹)</th><th className="text-right p-2 w-16">Qty</th><th className="text-right p-2 w-16">Units</th><th className="text-right p-2 w-24">Total</th><th className="w-8"></th></tr>
+                      <tr><th className="text-left p-2 w-2/5">Particular</th><th className="text-right p-2 w-20">Rate (₹)</th><th className="text-right p-2 w-16">No. of Pax</th><th className="text-right p-2 w-16">No. of Rooms</th><th className="text-right p-2 w-24">Total</th><th className="w-8"></th></tr>
                     </thead>
                     <tbody>
                       {dayItems.map(li => (
@@ -144,7 +144,7 @@ export function CostSheetModal({ booking, currentUser, onClose }: Props) {
                           <td className="p-2"><NumberInput value={li.rate} min={0} onChange={n => updateItem(li._id, 'rate', String(n))} className="w-full px-2 py-1 border border-stone-200 text-sm text-right bg-white outline-none" /></td>
                           <td className="p-2"><NumberInput value={li.qty} min={0} onChange={n => updateItem(li._id, 'qty', String(n))} className="w-full px-2 py-1 border border-stone-200 text-sm text-right bg-white outline-none" /></td>
                           <td className="p-2"><NumberInput value={li.units} min={0} onChange={n => updateItem(li._id, 'units', String(n))} className="w-full px-2 py-1 border border-stone-200 text-sm text-right bg-white outline-none" /></td>
-                          <td className="p-2 text-right font-medium">₹{(Number(li.rate ?? 0) * Number(li.qty ?? 1) * Number(li.units ?? 1)).toLocaleString('en-IN')}</td>
+                          <td className="p-2 text-right font-medium">₹{(Number(li.rate ?? 0) * Number(li.qty ?? 1)).toLocaleString('en-IN')}</td>
                           <td className="p-2"><button onClick={() => removeItem(li._id)} className="p-1 hover:bg-red-100 text-red-600 rounded"><Trash2 size={12} /></button></td>
                         </tr>
                       ))}

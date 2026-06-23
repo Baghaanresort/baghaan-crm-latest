@@ -25,12 +25,12 @@ export interface ProformaInvoicePdfProps {
 }
 
 function PiRow({ li }: { li: LineItem }) {
-  const total = (Number(li.rate) || 0) * (Number(li.qty) || 0) * (Number(li.units) || 1);
+  const total = (Number(li.rate) || 0) * (Number(li.qty) || 0);
   return (
     <View style={styles.row} wrap={false}>
       <Text style={[styles.td, col.particular]}>{li.particular}</Text>
       <Text style={[styles.td, col.rate, styles.right]}>{num(li.rate)}</Text>
-      <Text style={[styles.td, col.qty, styles.right]}>{li.qty}{li.units > 1 ? ` × ${li.units}` : ''}</Text>
+      <Text style={[styles.td, col.qty, styles.right]}>{li.qty}</Text>
       <Text style={[styles.td, col.total, styles.right]}>{num(total)}</Text>
     </View>
   );
@@ -93,7 +93,7 @@ export function ProformaInvoicePdf({ booking: b, pi, entity }: ProformaInvoicePd
           <View style={styles.thead} fixed>
             <Text style={[styles.th, col.particular]}>Particulars</Text>
             <Text style={[styles.th, col.rate, styles.right]}>Rate</Text>
-            <Text style={[styles.th, col.qty, styles.right]}>No. / Units</Text>
+            <Text style={[styles.th, col.qty, styles.right]}>No. of Pax</Text>
             <Text style={[styles.th, col.total, styles.right]}>Total (₹)</Text>
           </View>
 

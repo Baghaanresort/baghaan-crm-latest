@@ -1,12 +1,11 @@
 'use client';
 
-import { useState, useTransition, useMemo } from 'react';
+import { useState, useTransition } from 'react';
 import { X } from 'lucide-react';
 import { toast } from 'sonner';
 import { createCorporateBooking } from '@/lib/actions/corporate';
 import { updateBooking } from '@/lib/actions/bookings';
-import { ROOM_INVENTORY } from '@/lib/constants/rooms';
-import { datesInRange, isoDate, daysBetween, todayISO, addDays } from '@/lib/utils/date';
+import { isoDate, daysBetween, todayISO, addDays } from '@/lib/utils/date';
 import { isValidPhone, PHONE_ERROR } from '@/lib/validations/phone';
 import { DateInput } from '@/components/ui/DateInput';
 import { NumberInput } from '@/components/ui/NumberInput';
@@ -21,7 +20,7 @@ interface Props {
   onClose: () => void;
 }
 
-export function CorporateBookingModal({ booking, users, currentUser, existingBookings, onClose }: Props) {
+export function CorporateBookingModal({ booking, users, currentUser, onClose }: Props) {
   const isEdit = !!booking;
   const today = todayISO();
   const [isPending, startTransition] = useTransition();
@@ -46,24 +45,10 @@ export function CorporateBookingModal({ booking, users, currentUser, existingBoo
   // Nights is derived from the dates — computed in render, not stored/synced.
   const nights = daysBetween(form.arrival, form.departure);
 
-  const occupiedRooms = useMemo(() => {
-    const ranges = datesInRange(form.arrival, form.departure);
-    const set = new Set<string>();
-    existingBookings.forEach(b => {
-      if (b.id === booking?.id) return;
-      const bDates = datesInRange(b.arrival, b.departure);
-      if (bDates.some(d => ranges.includes(d))) (b.rooms ?? []).forEach(r => set.add(r));
-    });
-    return set;
-  }, [form.arrival, form.departure, existingBookings, booking?.id]);
-
   // Changing arrival defaults departure to the next day when it's empty or no
   // longer after arrival. A longer stay is preserved; user can still override.
   const handleArrivalChange = (v: string) =>
     setForm(f => ({ ...f, arrival: v, departure: (!f.departure || f.departure <= v) ? addDays(v, 1) : f.departure }));
-
-  const toggleRoom = (room: string) =>
-    setForm(f => ({ ...f, rooms: f.rooms.includes(room) ? f.rooms.filter(r => r !== room) : [...f.rooms, room] }));
 
   const handleSave = () => {
     if (!form.companyName.trim()) { toast.error('Company name is required'); return; }
@@ -108,7 +93,7 @@ export function CorporateBookingModal({ booking, users, currentUser, existingBoo
       <div className="bg-stone-50 max-w-4xl w-full my-8 max-h-[90vh] overflow-y-auto">
         <div className="sticky top-0 bg-emerald-900 text-white px-6 py-4 flex justify-between items-center z-10">
           <h2 style={{ fontFamily: "'Cormorant Garamond', serif", fontWeight: 600 }} className="text-xl tracking-wider">
-            {isEdit ? 'Edit Corporate Booking' : 'New Corporate Booking'}
+            {isEdit ? 'Edit Company Details' : 'New Company Details'}
           </h2>
           <button onClick={onClose} className="hover:bg-emerald-800 p-1.5 rounded"><X size={18} /></button>
         </div>
@@ -134,28 +119,7 @@ export function CorporateBookingModal({ booking, users, currentUser, existingBoo
                 <NumberInput value={form.guestCount[type]} min={0} onChange={n => setForm(f => ({ ...f, guestCount: { ...f.guestCount, [type]: n } }))} className="w-full px-3 py-2 border border-stone-300 text-sm outline-none bg-white" /></div>
             ))}
           </div>
-          <div>
-            <h3 className="text-sm uppercase tracking-wider text-emerald-900 border-b border-stone-300 pb-1.5 mb-3">Rooms</h3>
-            {Object.entries(ROOM_INVENTORY).map(([cat, rooms]) => (
-              <div key={cat} className="mb-3">
-                <h4 className="text-xs font-medium text-emerald-900 uppercase tracking-wider mb-1.5">{cat}</h4>
-                <div className="flex flex-wrap gap-1.5">
-                  {rooms.map(r => {
-                    const isSelected = form.rooms.includes(r);
-                    const isOccupied = occupiedRooms.has(r);
-                    const label = cat === 'Kothi' ? r.split(' ')[0] : (r.match(/\d+/)?.[0] ?? r);
-                    return (
-                      <button key={r} type="button" onClick={() => !isOccupied && toggleRoom(r)} disabled={isOccupied}
-                        className={`${cat === 'Kothi' ? 'px-3 text-xs' : 'w-9'} h-9 text-xs border transition ${isSelected ? 'bg-amber-500 text-white border-amber-600' : isOccupied ? 'bg-stone-200 text-stone-400 border-stone-200 cursor-not-allowed line-through' : 'bg-white border-stone-300 hover:border-amber-500'}`}>
-                        {label}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
-            <div className="text-sm text-stone-700 mt-2 bg-stone-100 px-3 py-2">Selected: <strong>{form.rooms.length}</strong> rooms</div>
-          </div>
+          <p className="text-xs text-stone-500 italic">Room-level detail is captured in the cost sheet — no need to pick rooms here.</p>
           <div><label className="text-xs text-stone-600 uppercase tracking-wider block mb-1">Remarks</label><textarea value={form.remarks} onChange={e => setForm(f => ({ ...f, remarks: e.target.value }))} rows={2} className="w-full px-3 py-2 border border-stone-300 text-sm outline-none bg-white" /></div>
           <div className="border border-stone-200 bg-white p-3">
             <AddOnsEditor value={form.addOns} onChange={v => setForm(f => ({ ...f, addOns: v }))} />
