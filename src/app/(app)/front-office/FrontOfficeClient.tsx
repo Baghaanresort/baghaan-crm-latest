@@ -1,18 +1,20 @@
 'use client';
 
 import { useState, useMemo, useTransition } from 'react';
-import { LogIn, LogOut, Check } from 'lucide-react';
+import { LogIn, LogOut, Check, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import { checkInBooking, checkOutBooking } from '@/lib/actions/bookings';
 import { fmtDate, todayISO } from '@/lib/utils/date';
 import { getBookingPaymentStatus } from '@/lib/utils/booking';
 import type { Booking } from '@/lib/types/booking';
+import type { CheckInDetailsInput } from '@/lib/validations/booking';
 import type { Payment } from '@/lib/types/payment';
 import type { UserRole } from '@/lib/types/profile';
 import dynamic from 'next/dynamic';
 
 const PaymentModal = dynamic(() => import('@/components/payments/PaymentModal').then(m => ({ default: m.PaymentModal })), { ssr: false });
 const FinalBillModal = dynamic(() => import('@/components/front-office/FinalBillModal').then(m => ({ default: m.FinalBillModal })), { ssr: false });
+const CheckInModal = dynamic(() => import('@/components/front-office/CheckInModal').then(m => ({ default: m.CheckInModal })), { ssr: false });
 
 interface Props {
   initialBookings: Booking[];
@@ -20,13 +22,15 @@ interface Props {
   currentUser: { id: string; name: string; role: UserRole };
 }
 
-type SubTab = 'arrivals' | 'inhouse' | 'departures' | 'billstorecord';
+type SubTab = 'arrivals' | 'inhouse' | 'departures' | 'billstorecord' | 'checkedout';
 
 export function FrontOfficeClient({ initialBookings, initialPayments, currentUser }: Props) {
   const today = todayISO();
   const [tab, setTab] = useState<SubTab>('arrivals');
   const [paymentFor, setPaymentFor] = useState<Booking | null>(null);
   const [finalBillFor, setFinalBillFor] = useState<Booking | null>(null);
+  const [checkInFor, setCheckInFor] = useState<Booking | null>(null);
+  const [checkOutFor, setCheckOutFor] = useState<Booking | null>(null);
   const [isPending, startTransition] = useTransition();
   const canAct = currentUser.role === 'Front Office' || currentUser.role === 'Admin';
 
@@ -53,12 +57,17 @@ export function FrontOfficeClient({ initialBookings, initialPayments, currentUse
     () => bookings.filter(b => (b.status === 'checked_in' || b.status === 'checked_out') && b.departure <= today && !b.finalBill),
     [bookings, today],
   );
+  const checkedOut = useMemo(
+    () => bookings.filter(b => b.status === 'checked_out').sort((a, b) => (b.departure ?? '').localeCompare(a.departure ?? '')),
+    [bookings],
+  );
 
   const lists: Record<SubTab, { title: string; items: Booking[]; empty: string }> = {
     arrivals: { title: "Today's Arrivals", items: arriving, empty: 'No arrivals to check in' },
     inhouse: { title: 'In-House Guests', items: inHouse, empty: 'No guests in-house' },
     departures: { title: "Today's Departures", items: departing, empty: 'No departures today' },
     billstorecord: { title: 'Bills to Record', items: billsToRecord, empty: 'All bills recorded ✓' },
+    checkedout: { title: 'Checked Out', items: checkedOut, empty: 'No checked-out guests yet' },
   };
 
   const activeList = lists[tab]!;
@@ -67,19 +76,25 @@ export function FrontOfficeClient({ initialBookings, initialPayments, currentUse
   // is at/after departure. Advances during the stay are taken by Sales (bookings tab).
   const atCheckout = (b: Booking) => b.departure <= today && (b.status === 'checked_in' || b.status === 'checked_out');
 
-  const handleCheckIn = (id: string) => {
+  const handleCheckIn = (details: CheckInDetailsInput) => {
+    const target = checkInFor;
+    if (!target) return;
     startTransition(async () => {
-      const res = await checkInBooking(id);
+      const res = await checkInBooking(target.id, details);
       if (!res.success) { toast.error(res.error); return; }
-      toast.success('Guest checked in');
+      toast.success('Guest checked in — now In-House');
+      setCheckInFor(null);
     });
   };
 
-  const handleCheckOut = (id: string) => {
+  const handleCheckOut = () => {
+    const target = checkOutFor;
+    if (!target) return;
     startTransition(async () => {
-      const res = await checkOutBooking(id);
+      const res = await checkOutBooking(target.id);
       if (!res.success) { toast.error(res.error); return; }
       toast.success('Guest checked out');
+      setCheckOutFor(null);
     });
   };
 
@@ -122,7 +137,7 @@ export function FrontOfficeClient({ initialBookings, initialPayments, currentUse
                 const ps = pStats(b);
                 // 3-step checkout gate: bill must be added → then payment → then checkout.
                 const hasBill = !!b.finalBill;
-                const hasPayment = ps.totalPaid > 0 || ps.totalUnverified > 0;
+                const hasPayment = ps.totalPaid > 0;
                 return (
                   <tr key={b.id} className="border-t border-stone-100 hover:bg-stone-50">
                     <td className="p-3">
@@ -144,12 +159,12 @@ export function FrontOfficeClient({ initialBookings, initialPayments, currentUse
                       <td className="p-3 text-right">
                         <div className="flex gap-1 justify-end items-center">
                           {b.status === 'confirmed' && b.arrival <= today && (
-                            <button onClick={() => handleCheckIn(b.id)} disabled={isPending} className="inline-flex items-center gap-1 text-xs bg-emerald-700 text-white px-2.5 py-1 hover:bg-emerald-800 disabled:opacity-50">
+                            <button onClick={() => setCheckInFor(b)} disabled={isPending} className="inline-flex items-center gap-1 text-xs bg-emerald-700 text-white px-2.5 py-1 hover:bg-emerald-800 disabled:opacity-50">
                               <LogIn size={12} /> CHECK IN
                             </button>
                           )}
                           {b.status === 'checked_in' && (
-                            <button onClick={() => handleCheckOut(b.id)} disabled={isPending || !hasPayment} title={hasPayment ? 'Check out guest' : 'Record a payment before checking out'} className="inline-flex items-center gap-1 text-xs border border-stone-300 text-stone-700 px-2.5 py-1 hover:bg-stone-100 disabled:opacity-50 disabled:cursor-not-allowed">
+                            <button onClick={() => setCheckOutFor(b)} disabled={isPending || !hasPayment} title={hasPayment ? 'Check out guest' : 'Record a payment before checking out'} className="inline-flex items-center gap-1 text-xs border border-stone-300 text-stone-700 px-2.5 py-1 hover:bg-stone-100 disabled:opacity-50 disabled:cursor-not-allowed">
                               <LogOut size={12} /> CHECK OUT
                             </button>
                           )}
@@ -178,6 +193,27 @@ export function FrontOfficeClient({ initialBookings, initialPayments, currentUse
 
       {paymentFor && <PaymentModal booking={paymentFor} currentUser={currentUser} payments={payments.filter(p => p.bookingId === paymentFor.id)} onClose={() => setPaymentFor(null)} />}
       {finalBillFor && <FinalBillModal booking={finalBillFor} currentUser={currentUser} payments={payments.filter(p => p.bookingId === finalBillFor.id)} onClose={() => setFinalBillFor(null)} />}
+      {checkInFor && <CheckInModal booking={checkInFor} onConfirm={handleCheckIn} onClose={() => setCheckInFor(null)} isPending={isPending} />}
+
+      {checkOutFor && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white max-w-sm w-full shadow-xl">
+            <div className="px-6 py-4 border-b border-stone-200 flex items-center gap-2">
+              <AlertTriangle size={18} className="text-amber-600" />
+              <h3 className="text-lg text-stone-800" style={{ fontFamily: "'Cormorant Garamond', serif", fontWeight: 600 }}>Confirm Check-Out</h3>
+            </div>
+            <div className="px-6 py-4 text-sm text-stone-600">
+              Check out <strong className="text-stone-900">{checkOutFor.guestName}</strong> ({checkOutFor.confirmationNumber})? This marks the stay complete and moves them to the Checked Out list.
+            </div>
+            <div className="px-6 py-4 bg-stone-50 border-t border-stone-200 flex justify-end gap-2">
+              <button onClick={() => setCheckOutFor(null)} disabled={isPending} className="px-4 py-2 text-sm border border-stone-300 text-stone-600 hover:bg-stone-50 disabled:opacity-50">Cancel</button>
+              <button onClick={handleCheckOut} disabled={isPending} className="inline-flex items-center gap-1.5 px-4 py-2 text-sm bg-emerald-700 text-white hover:bg-emerald-800 disabled:opacity-50">
+                <LogOut size={14} /> {isPending ? 'CHECKING OUT…' : 'CONFIRM CHECK-OUT'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

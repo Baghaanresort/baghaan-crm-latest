@@ -33,6 +33,15 @@ export interface RoomCharge {
   total: number;
 }
 
+export interface CheckInDetails {
+  adults: number;
+  childBelow6: number;
+  child6to12: number;
+  child12to18: number;
+  roomsAssigned: number;
+  roomNumbers: string[];
+}
+
 export interface LineItem {
   day: string;
   dayLabel: string;
@@ -100,6 +109,7 @@ export interface Booking {
   totalAmount: number;
   addOns: AddOn[];
   roomCharges: RoomCharge[];
+  checkInDetails: CheckInDetails | null;
   advancePaid: number;
   inclusions: string;
   remarks: string;

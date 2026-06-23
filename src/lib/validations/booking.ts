@@ -15,6 +15,16 @@ export const RoomChargeSchema = z.object({
   total: z.number().min(0).default(0),
 });
 
+export const CheckInDetailsSchema = z.object({
+  adults: z.number().int().min(0).default(0),
+  childBelow6: z.number().int().min(0).default(0),
+  child6to12: z.number().int().min(0).default(0),
+  child12to18: z.number().int().min(0).default(0),
+  roomsAssigned: z.number().int().min(0).default(0),
+  roomNumbers: z.array(z.string()).default([]),
+});
+export type CheckInDetailsInput = z.infer<typeof CheckInDetailsSchema>;
+
 export const BookingSchema = z
   .object({
     guestName: z.string().min(1, 'Guest name is required'),
