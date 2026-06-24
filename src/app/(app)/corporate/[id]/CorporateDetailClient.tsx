@@ -210,7 +210,7 @@ export function CorporateDetailClient({ booking, payments, users, currentUser }:
           {/* Documents */}
           <Card icon={<FileText size={15} />} title="Documents">
             <div className="space-y-2">
-              <DocRow available={!!booking.costSheet?.lineItems?.length} label="Cost Sheet / Quotation" onView={() => printDoc(`/api/print/cost-sheet?bookingId=${booking.id}`)} onPdf={() => downloadPdf(`/api/pdf/cost-sheet?bookingId=${booking.id}`)} />
+              <DocRow available={!!booking.costSheet?.lineItems?.length} label="Cost Sheet" onView={() => printDoc(`/api/print/cost-sheet?bookingId=${booking.id}`)} onPdf={() => downloadPdf(`/api/pdf/cost-sheet?bookingId=${booking.id}`)} />
               <DocRow available={!!booking.proformaInvoice} label="Proforma Invoice" onView={() => setShowPI(true)} onPdf={() => downloadPdf(`/api/pdf/pi?bookingId=${booking.id}`)} />
               <DocRow available={false} label="Tax Invoice (coming soon)" />
             </div>

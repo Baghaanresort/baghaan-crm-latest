@@ -39,7 +39,7 @@ export async function GET(request: NextRequest) {
         terms={booking.costSheet?.terms ?? ''}
       />,
     );
-    const filename = `Quotation-${slug(booking.companyName ?? '')}-${slug(booking.confirmationNumber)}.pdf`;
+    const filename = `Cost-Sheet-${slug(booking.companyName ?? '')}-${slug(booking.confirmationNumber)}.pdf`;
     return new Response(new Uint8Array(buffer), {
       headers: {
         'Content-Type': 'application/pdf',

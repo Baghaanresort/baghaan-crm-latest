@@ -40,6 +40,20 @@ const STATUS_TABS = [
   { key: 'cancelled', label: 'Cancelled', dot: 'bg-stone-400' },
 ] as const;
 
+type StatusBucket = 'hold' | 'inhouse' | 'upcoming' | 'past' | 'cancelled';
+
+// Which status tab a booking belongs to. "In House" means Front Office has physically
+// checked the guest in (status === 'checked_in') — NOT merely that today falls inside the
+// stay dates — so a paid/confirmed reservation stays under "Confirmed" until check-in.
+function statusBucket(b: Booking, payments: Payment[], today: string): StatusBucket {
+  if (b.status === 'cancelled') return 'cancelled';
+  const eff = getEffectiveStatus(b, payments);
+  if (eff === 'hold') return 'hold';
+  if (b.status === 'checked_in') return 'inhouse';
+  if (b.status === 'checked_out' || b.departure <= today) return 'past';
+  return 'upcoming'; // confirmed, awaiting check-in (future arrival or current stay)
+}
+
 export function BookingsClient({ initialBookings, initialPayments, initialRequests, users, currentUser }: Props) {
   const today = todayISO();
   const role = currentUser.role;
@@ -112,7 +126,7 @@ export function BookingsClient({ initialBookings, initialPayments, initialReques
       if (b.status === 'cancelled') return; // voided — excluded from active counts
       const eff = getEffectiveStatus(b, payments);
       if (b.arrival === today) arrivingToday++;
-      if (b.arrival <= today && b.departure > today && eff === 'confirmed') inHouseNow++;
+      if (b.status === 'checked_in') inHouseNow++; // In House = physically checked in
       if (b.departure === today) departingToday++;
       if (eff === 'hold') onHold++;
     });
@@ -123,28 +137,22 @@ export function BookingsClient({ initialBookings, initialPayments, initialReques
   const statusCounts = useMemo(() => {
     const c: Record<string, number> = { all: 0, hold: 0, upcoming: 0, inhouse: 0, past: 0, cancelled: 0 };
     bookings.forEach(b => {
-      if (b.status === 'cancelled') { c['cancelled']!++; return; } // shown only under the Cancelled tab
+      const bucket = statusBucket(b, payments, today);
+      if (bucket === 'cancelled') { c['cancelled']!++; return; } // shown only under the Cancelled tab
       c['all']!++;
-      const eff = getEffectiveStatus(b, payments);
-      if (eff === 'hold') c['hold']!++;
-      if (b.arrival > today && eff === 'confirmed') c['upcoming']!++;
-      if (b.arrival <= today && b.departure > today && eff === 'confirmed') c['inhouse']!++;
-      if (b.departure <= today) c['past']!++;
+      c[bucket]!++;
     });
     return c;
   }, [bookings, payments, today]);
 
   const filtered = useMemo(() => {
     return bookings.filter(b => {
-      const eff = effStatus(b);
+      const bucket = statusBucket(b, payments, today);
       if (filterAgent !== 'all' && b.createdBy !== filterAgent) return false;
       // Cancelled bookings are kept as a record but live only under the Cancelled tab.
-      if (filterStatus === 'cancelled') { if (b.status !== 'cancelled') return false; }
-      else if (b.status === 'cancelled') return false;
-      if (filterStatus === 'hold' && eff !== 'hold') return false;
-      if (filterStatus === 'upcoming' && (b.arrival <= today || eff !== 'confirmed')) return false;
-      if (filterStatus === 'inhouse' && !(b.arrival <= today && b.departure > today && eff === 'confirmed')) return false;
-      if (filterStatus === 'past' && b.departure > today) return false;
+      if (filterStatus === 'cancelled') { if (bucket !== 'cancelled') return false; }
+      else if (bucket === 'cancelled') return false;
+      else if (filterStatus !== 'all' && bucket !== filterStatus) return false;
       if (filterPayment !== 'all') {
         const ps = pStats(b);
         if (filterPayment === 'unpaid' && ps.totalPaid > 0) return false;
@@ -158,7 +166,7 @@ export function BookingsClient({ initialBookings, initialPayments, initialReques
       }
       return true;
     }).sort((a, b) => b.arrival.localeCompare(a.arrival));
-  }, [bookings, search, filterAgent, filterStatus, filterPayment, today]);
+  }, [bookings, payments, search, filterAgent, filterStatus, filterPayment, today]);
 
   const handleDecide = (reqId: string, decision: 'approved' | 'rejected') => {
     startTransition(async () => {
@@ -339,15 +347,15 @@ export function BookingsClient({ initialBookings, initialPayments, initialReques
                 const eff = effStatus(b);
                 // For Sales, +PAY disappears once a payment is recorded (BILL is FO/Admin-only).
                 const paymentRecorded = ps.totalPaid > 0;
-                const timeStatus = b.departure <= today ? 'past' : b.arrival <= today ? 'inhouse' : 'upcoming';
+                const bucket = statusBucket(b, payments, today);
 
                 let statusColor = 'bg-stone-100 text-stone-600';
                 let statusLabel = 'Checked Out';
                 let statusDot = 'bg-stone-400';
-                if (eff === 'hold') { statusColor = 'bg-amber-100 text-amber-800'; statusLabel = 'On Hold'; statusDot = 'bg-amber-500'; }
-                else if (timeStatus === 'inhouse') { statusColor = 'bg-emerald-100 text-emerald-800'; statusLabel = 'In House'; statusDot = 'bg-emerald-600'; }
-                else if (timeStatus === 'upcoming') { statusColor = 'bg-blue-100 text-blue-800'; statusLabel = 'Confirmed'; statusDot = 'bg-blue-500'; }
-                if (b.status === 'cancelled') { statusColor = 'bg-stone-200 text-stone-500'; statusLabel = 'Cancelled'; statusDot = 'bg-stone-400'; }
+                if (bucket === 'hold') { statusColor = 'bg-amber-100 text-amber-800'; statusLabel = 'On Hold'; statusDot = 'bg-amber-500'; }
+                else if (bucket === 'inhouse') { statusColor = 'bg-emerald-100 text-emerald-800'; statusLabel = 'In House'; statusDot = 'bg-emerald-600'; }
+                else if (bucket === 'upcoming') { statusColor = 'bg-blue-100 text-blue-800'; statusLabel = 'Confirmed'; statusDot = 'bg-blue-500'; }
+                if (bucket === 'cancelled') { statusColor = 'bg-stone-200 text-stone-500'; statusLabel = 'Cancelled'; statusDot = 'bg-stone-400'; }
 
                 let payBadgeLabel = 'Unpaid';
                 let payBadgeColor = 'bg-red-100 text-red-700';

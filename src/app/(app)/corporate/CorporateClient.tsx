@@ -138,7 +138,9 @@ export function CorporateClient({ initialBookings, initialPayments, users, lastA
       const result = await generateProformaInvoice(b.id);
       if (!result.success) { toast.error(result.error); return; }
       toast.success(`Proforma Invoice ${result.data.piNumber} generated`);
-      setTimeout(() => setPiFor(b), 100);
+      // Open the preview with the freshly-generated PI merged in — the `b` in this
+      // closure predates generation, so passing it raw would show "no PI generated".
+      setPiFor({ ...b, proformaInvoice: result.data.pi, corporateStage: 'pi_generated' });
     });
   };
 
@@ -183,7 +185,7 @@ export function CorporateClient({ initialBookings, initialPayments, users, lastA
     // Lost deal: no workflow actions, just records + history.
     if (isLost(b)) {
       const lostMenu: ActionMenuItem[] = [];
-      if (hasCS) lostMenu.push({ label: 'Download Quotation (PDF)', icon: <Download size={13} />, onClick: () => downloadPdf(`/api/pdf/cost-sheet?bookingId=${b.id}`) });
+      if (hasCS) lostMenu.push({ label: 'Download Cost Sheet (PDF)', icon: <Download size={13} />, onClick: () => downloadPdf(`/api/pdf/cost-sheet?bookingId=${b.id}`) });
       if (hasPI) lostMenu.push({ label: 'Download Proforma Invoice (PDF)', icon: <Download size={13} />, onClick: () => downloadPdf(`/api/pdf/pi?bookingId=${b.id}`) });
       lostMenu.push({ label: 'Activity Log', icon: <History size={13} />, onClick: () => setActivityFor(b) });
       return { primary: null, muted: 'Lost', menu: lostMenu };
@@ -233,7 +235,7 @@ export function CorporateClient({ initialBookings, initialPayments, users, lastA
     if (canGenPI && !hasPI) menu.push({ id: 'genpi', label: 'Generate Proforma Invoice', icon: <FileText size={13} />, onClick: () => handleGenPI(b) });
     if (canPay && (stage === 'cost_sheet_accepted' || stage === 'pi_generated' || stage === 'advance_paid'))
       menu.push({ id: 'pay', label: 'Record Payment', icon: <Plus size={13} />, onClick: () => setPaymentFor(b) });
-    if (hasCS) menu.push({ id: 'cspdf', label: 'Download Quotation (PDF)', icon: <Download size={13} />, onClick: () => downloadPdf(`/api/pdf/cost-sheet?bookingId=${b.id}`) });
+    if (hasCS) menu.push({ id: 'cspdf', label: 'Download Cost Sheet (PDF)', icon: <Download size={13} />, onClick: () => downloadPdf(`/api/pdf/cost-sheet?bookingId=${b.id}`) });
     if (hasPI) {
       menu.push({ id: 'viewpi', label: 'View Proforma Invoice', icon: <FileText size={13} />, onClick: () => setPiFor(b) });
       menu.push({ id: 'pipdf', label: 'Download Proforma Invoice (PDF)', icon: <Download size={13} />, onClick: () => downloadPdf(`/api/pdf/pi?bookingId=${b.id}`) });

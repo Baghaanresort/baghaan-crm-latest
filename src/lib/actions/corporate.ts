@@ -183,7 +183,7 @@ export async function markCostSheetAccepted(bookingId: string): Promise<ActionRe
 
 export async function generateProformaInvoice(
   bookingId: string
-): Promise<ActionResult<{ piNumber: string }>> {
+): Promise<ActionResult<{ piNumber: string; pi: ProformaInvoice }>> {
   if (!bookingId) return err('Booking ID required');
 
   const supabase = await createClient();
@@ -237,7 +237,7 @@ export async function generateProformaInvoice(
 
   await logCorporateActivity(supabase, bookingId, 'pi_generated', `Proforma invoice ${piNumber} generated — advance ₹${advanceRequired.toLocaleString('en-IN')} required.`, actor);
   revalidateCorporatePaths();
-  return ok({ piNumber });
+  return ok({ piNumber, pi });
 }
 
 // ---------- createCorporateBooking ----------
