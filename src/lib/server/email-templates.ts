@@ -55,8 +55,8 @@ function row(label: string, valueHtml: string): string {
 function table(rowsHtml: string): string {
   return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:14px 0;">${rowsHtml}</table>`;
 }
-function button(url: string, label: string): string {
-  return `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:20px 0;"><tr><td style="background:${C.emerald};">
+function button(url: string, label: string, bg: string = C.emerald): string {
+  return `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:14px 0;"><tr><td style="background:${bg};">
     <a href="${esc(url)}" style="display:inline-block;padding:13px 30px;color:${C.cream};text-decoration:none;font-size:13px;letter-spacing:1.5px;font-weight:600;">${esc(label)}</a>
   </td></tr></table>`;
 }
@@ -89,7 +89,8 @@ export function voucherEmail(b: MsgBooking, voucherUrl: string): { subject: stri
   const body = `<p style="margin:0 0 10px;">Dear ${esc(b.guestName)},</p>
     <p style="margin:0 0 2px;">Your reservation is <strong style="color:${C.emerald};">confirmed</strong>. We can't wait to host you at the orchard. Your details:</p>
     ${detail}${fin}
-    ${button(voucherUrl, 'VIEW / DOWNLOAD VOUCHER')}
+    ${button(voucherUrl.replace('/api/voucher/view', '/api/pdf/voucher'), 'DOWNLOAD PDF VOUCHER')}
+    ${button(voucherUrl, 'VIEW VOUCHER ONLINE', '#b45309')}
     <p style="margin:4px 0 0;color:${C.muted};font-size:13px;">If anything above needs a change, just reply to this email.</p>`;
   return { subject: `Your Baghaan booking is confirmed — ${b.confirmationNumber}`, html: shell('Booking Voucher', b.confirmationNumber, body) };
 }

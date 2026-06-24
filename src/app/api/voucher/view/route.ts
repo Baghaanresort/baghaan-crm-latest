@@ -22,7 +22,17 @@ export async function GET(request: NextRequest) {
 
   const payments = await getVerifiedPaymentsForBooking(bookingId);
   const html = buildVoucherHTML(dbToBooking(data), payments);
-  return new Response(html, {
+
+  // Floating "Download PDF" button for the guest (hidden when printing).
+  const pdfUrl = `/api/pdf/voucher?bookingId=${encodeURIComponent(bookingId)}&token=${encodeURIComponent(token)}`;
+  const fab = `<style>@media print{#dl-pdf-fab{display:none!important}}</style>`
+    + `<div id="dl-pdf-fab" style="position:fixed;top:16px;right:16px;z-index:50">`
+    + `<a href="${pdfUrl}" style="display:inline-block;background:#064e3b;color:#fef3c7;text-decoration:none;`
+    + `padding:10px 18px;font-family:Lora,Georgia,serif;font-size:13px;letter-spacing:1px;border-radius:4px;`
+    + `box-shadow:0 2px 8px rgba(0,0,0,0.15)">⬇ Download PDF</a></div>`;
+  const withFab = html.replace('</body>', `${fab}</body>`);
+
+  return new Response(withFab, {
     headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'private, no-cache' },
   });
 }

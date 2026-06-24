@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 import { ok, err, type ActionResult } from '@/lib/types/result';
 import { sendVoucher, type MsgBooking } from '@/lib/server/messaging';
 import { getVoucherShareUrl } from '@/lib/actions/vouchers';
+import { storeVoucherPdf } from '@/lib/server/voucher-pdf-store';
 import { dbToBooking } from '@/lib/mappers/booking';
 import { dbToPayment } from '@/lib/mappers/payment';
 import { getBookingPaymentStatus } from '@/lib/utils/booking';
@@ -38,6 +39,10 @@ export async function dispatchVoucher(bookingId: string): Promise<ActionResult> 
     paid: ps.totalPaid,
     balance: ps.balance,
   };
+
+  // Generate + store the voucher PDF in Supabase Storage so the guest can download it
+  // (the email/voucher links point at /api/pdf/voucher which serves the stored file).
+  await storeVoucherPdf(bookingId); // best-effort; never throws
 
   const voucherUrl = await getVoucherShareUrl(bookingId);
   await sendVoucher(supabase, booking, voucherUrl); // never throws; logs per-channel

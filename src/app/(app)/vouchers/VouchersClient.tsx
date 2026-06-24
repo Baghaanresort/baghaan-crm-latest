@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import dynamic from 'next/dynamic';
-import { Search, FileText, Printer, Eye, Edit2, Lock, History } from 'lucide-react';
+import { Search, FileText, Printer, Eye, Edit2, Lock, History, Download } from 'lucide-react';
 import { fmtDate } from '@/lib/utils/date';
 import { buildWaLink, WA_TEMPLATES } from '@/lib/constants/whatsapp';
 import { getVoucherShareUrl } from '@/lib/actions/vouchers';
@@ -41,6 +41,10 @@ export function VouchersClient({ initialBookings, users, currentUser }: Props) {
 
   const handleView = (b: Booking) => {
     window.open(`/api/print/voucher?bookingId=${b.id}`, '_blank', 'noopener,noreferrer');
+  };
+
+  const handleDownloadPdf = (b: Booking) => {
+    window.open(`/api/pdf/voucher?bookingId=${b.id}`, '_blank');
   };
 
   const handleWhatsApp = async (b: Booking) => {
@@ -98,6 +102,9 @@ export function VouchersClient({ initialBookings, users, currentUser }: Props) {
                 )}
                 <button onClick={() => handleView(b)} className="flex items-center justify-center gap-1 text-xs border border-emerald-700 text-emerald-800 px-3 py-1.5 hover:bg-emerald-50 transition tracking-wider">
                   <Eye size={12} /> VIEW
+                </button>
+                <button onClick={() => handleDownloadPdf(b)} title="Download PDF voucher" className="flex items-center justify-center gap-1 text-xs border border-amber-600 text-amber-700 px-3 py-1.5 hover:bg-amber-50 transition tracking-wider">
+                  <Download size={12} /> PDF
                 </button>
                 <button onClick={() => handlePrint(b)} className="flex-1 flex items-center justify-center gap-1.5 text-xs bg-emerald-900 text-amber-100 py-1.5 hover:bg-emerald-800 transition tracking-wider">
                   <Printer size={12} /> PRINT VOUCHER
