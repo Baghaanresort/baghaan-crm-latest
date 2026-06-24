@@ -1,7 +1,6 @@
 'use server';
 
 import { z } from 'zod';
-import { createHmac } from 'crypto';
 import { headers } from 'next/headers';
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
@@ -11,6 +10,7 @@ import { bookingToDb, dbToBooking } from '@/lib/mappers/booking';
 import { getBookingHistory } from '@/lib/queries/bookings';
 import { checkRoomConflict } from '@/lib/utils/conflict';
 import { isVoucherEditable } from '@/lib/utils/voucher';
+import { makeVoucherToken } from '@/lib/server/voucher-token';
 import type { Booking } from '@/lib/types/booking';
 
 export interface VoucherEditEntry {
@@ -34,16 +34,11 @@ export async function getVoucherHistory(bookingId: string): Promise<ActionResult
   return ok(await getBookingHistory(bookingId));
 }
 
-function makeToken(bookingId: string): string {
-  const secret = process.env.VOUCHER_SECRET ?? 'baghaan-orchard-voucher-2024';
-  return createHmac('sha256', secret).update(bookingId).digest('hex').slice(0, 20);
-}
-
 export async function getVoucherShareUrl(bookingId: string): Promise<string> {
   const hdrs = await headers();
   const host = hdrs.get('host') ?? 'localhost:3000';
   const proto = host.startsWith('localhost') ? 'http' : 'https';
-  const token = makeToken(bookingId);
+  const token = makeVoucherToken(bookingId);
   return `${proto}://${host}/api/voucher/view?bookingId=${bookingId}&token=${token}`;
 }
 

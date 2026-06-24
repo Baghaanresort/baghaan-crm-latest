@@ -9,8 +9,9 @@ import { VoucherPdf } from '@/lib/pdf/VoucherPdf';
 export const VOUCHER_BUCKET = 'baghaan-crm-voucher';
 const pathFor = (bookingId: string) => `${bookingId}.pdf`;
 
-// Render the voucher PDF for a booking from current data. Service-role read (bypasses RLS).
-async function renderVoucher(bookingId: string): Promise<Buffer | null> {
+// Render the voucher PDF for a booking from *current* data. Service-role read
+// (bypasses RLS) — callers MUST authorize the request before invoking this.
+export async function renderVoucher(bookingId: string): Promise<Buffer | null> {
   const db = createAdminClient();
   const { data } = await db.from('bookings').select('*').eq('id', bookingId).single();
   if (!data) return null;
@@ -37,18 +38,6 @@ export async function storeVoucherPdf(bookingId: string): Promise<string | null>
   }
 }
 
-// Serve the stored voucher PDF; on a miss, generate it, store it for next time, and return it.
-export async function getOrCreateVoucherPdf(bookingId: string): Promise<Buffer | null> {
-  const db = createAdminClient();
-  try {
-    const dl = await db.storage.from(VOUCHER_BUCKET).download(pathFor(bookingId));
-    if (dl.data) return Buffer.from(await dl.data.arrayBuffer());
-  } catch { /* fall through to generate */ }
-
-  const buffer = await renderVoucher(bookingId);
-  if (!buffer) return null;
-  const { error } = await db.storage.from(VOUCHER_BUCKET)
-    .upload(pathFor(bookingId), buffer, { contentType: 'application/pdf', upsert: true });
-  if (error) console.error('[getOrCreateVoucherPdf upload]', error.message);
-  return buffer;
-}
+// Note: downloads deliberately render fresh (see /api/pdf/voucher) instead of
+// streaming the stored object, so an edited booking / new payment is never served
+// from a stale snapshot. storeVoucherPdf keeps the bucket copy as the as-sent record.
