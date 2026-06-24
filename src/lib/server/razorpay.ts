@@ -66,12 +66,14 @@ export async function createPaymentLink(
   // Set RAZORPAY_NOTIFY=false once your own WhatsApp/email delivery is configured.
   const notifyOn = process.env.RAZORPAY_NOTIFY !== 'false';
   // Once our own branded email sender is configured (Resend API key + a verified
-  // EMAIL_FROM), WE email the payment link (see sendPaymentRequest). Suppress
-  // Razorpay's duplicate email in that case so the guest doesn't get two. We still
-  // let Razorpay deliver SMS + WhatsApp. If our sender isn't configured, fall back
-  // to Razorpay's email so a link is never left without an email channel.
-  // Override per-channel with RAZORPAY_NOTIFY=false (kills all Razorpay notifications).
-  const ownEmail = !!process.env.RESEND_API_KEY && !!process.env.EMAIL_FROM;
+  // custom-domain EMAIL_FROM), WE email the payment link (see sendPaymentRequest), so
+  // suppress Razorpay's duplicate email. We still let Razorpay deliver SMS + WhatsApp.
+  // The EMAIL_FROM must be a real domain — Resend's default onboarding@resend.dev can
+  // only reach the account owner, so if that's all we have we MUST keep Razorpay's
+  // email or the guest gets nothing. Falls back to Razorpay email when unconfigured.
+  // Override with RAZORPAY_NOTIFY=false (kills all Razorpay notifications).
+  const emailFrom = process.env.EMAIL_FROM ?? '';
+  const ownEmail = !!process.env.RESEND_API_KEY && !!emailFrom && !/resend\.dev/i.test(emailFrom);
   const body: Record<string, unknown> = {
     amount: args.amountPaise,
     currency: 'INR',
