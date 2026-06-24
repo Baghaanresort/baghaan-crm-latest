@@ -46,3 +46,6 @@ next-env.d.ts
 # stray playwright snapshot exports
 bookings.yml
 *.playwright-snapshot.yml
+
+pi-draft-preview.png
+*.screenshot.png
