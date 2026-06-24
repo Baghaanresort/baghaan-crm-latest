@@ -1,0 +1,4 @@
+access key id:3189b6b00c16cba304c4b06d2a1888f9
+secret access key:a897eb1a465e318b585b5707cdea2769ddb82c629b10da2ad40a38cdb04ea61d
+endpoint:https://uopeetocjjictzjpvlew.storage.supabase.co/storage/v1/s3
+region:ap-south-1

@@ -6,7 +6,7 @@ const ADMIN_ROUTES = ['/admin'];
 
 // Skip middleware for static assets and API export/print routes (no auth needed at edge)
 // /api/webhooks — Razorpay, authenticated by signature; /api/cron — Vercel Cron, authenticated by CRON_SECRET
-const SKIP_ROUTES = ['/api/export', '/api/print', '/api/pdf/voucher', '/api/webhooks', '/api/cron'];
+const SKIP_ROUTES = ['/api/export', '/api/print', '/api/pdf/voucher', '/api/voucher/view', '/api/webhooks', '/api/cron'];
 
 export async function middleware(request: NextRequest) {
   const path = request.nextUrl.pathname;
