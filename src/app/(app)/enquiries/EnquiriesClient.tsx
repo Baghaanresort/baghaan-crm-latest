@@ -4,7 +4,7 @@ import { useState, useMemo, useTransition, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Plus, Search, Edit2, Download, MessageCircle, Eye } from 'lucide-react';
 import { toast } from 'sonner';
-import { updateEnquiry, bookEnquiry, releaseEnquiryHold } from '@/lib/actions/enquiries';
+import { updateEnquiry, sendVoucherAndConfirm, releaseEnquiryHold } from '@/lib/actions/enquiries';
 import { sendAdvanceRequest } from '@/lib/actions/transactions';
 import { ENQUIRY_STATUSES, ENQUIRY_SOURCES, LOST_REASONS } from '@/lib/constants/enquiry';
 import { buildWaLink, WA_TEMPLATES } from '@/lib/constants/whatsapp';
@@ -135,11 +135,13 @@ export function EnquiriesClient({ initialEnquiries, heldBookings, activeBookings
     });
   };
 
+  // "Send Voucher" is the confirm action: it dispatches the voucher AND confirms the booking.
   const handleBook = (e: Enquiry) => {
+    if (!e.heldBookingId) { toast.error('No held booking for this enquiry'); return; }
     startTransition(async () => {
-      const result = await bookEnquiry(e.id);
+      const result = await sendVoucherAndConfirm(e.heldBookingId!);
       if (!result.success) { toast.error(result.error); return; }
-      toast.success(`Booked · ${result.data.confirmationNumber}`);
+      toast.success(`Voucher sent · booking confirmed · ${result.data.confirmationNumber}`);
       setBookFor(null);
       router.refresh();
     });
@@ -292,6 +294,7 @@ export function EnquiriesClient({ initialEnquiries, heldBookings, activeBookings
                 <th className="text-left p-3 text-xs uppercase tracking-wider">Contact</th>
                 <th className="text-left p-3 text-xs uppercase tracking-wider">Source / Type</th>
                 <th className="text-left p-3 text-xs uppercase tracking-wider">Stage</th>
+                <th className="text-left p-3 text-xs uppercase tracking-wider">Voucher Sent</th>
                 <th className="text-left p-3 text-xs uppercase tracking-wider">Follow-up</th>
                 <th className="text-left p-3 text-xs uppercase tracking-wider">Next Action</th>
                 <th className="text-left p-3 text-xs uppercase tracking-wider">Owner</th>
@@ -330,6 +333,13 @@ export function EnquiriesClient({ initialEnquiries, heldBookings, activeBookings
                         <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${st.dot}`} />
                         {st.label}
                       </span>
+                    </td>
+                    <td className="p-3 text-xs">
+                      {e.status === 'booked'
+                        ? <span className="text-emerald-700 font-medium">Yes</span>
+                        : e.status === 'advance_confirmed'
+                          ? <span className="text-amber-700 font-medium">No</span>
+                          : <span className="text-stone-300">—</span>}
                     </td>
                     <td className={`p-3 text-xs ${isOverdue ? 'text-red-700 font-medium' : 'text-stone-600'}`}>
                       {e.followupDate ? fmtDate(e.followupDate) : '—'}
@@ -386,8 +396,8 @@ export function EnquiriesClient({ initialEnquiries, heldBookings, activeBookings
                             )}
                             {e.status === 'advance_confirmed' && (
                               <button onClick={() => setBookFor(e)} disabled={isPending}
-                                className="text-xs border border-emerald-600 px-2 py-1 hover:bg-emerald-50 text-emerald-700 disabled:opacity-50 whitespace-nowrap">
-                                Book →
+                                className="text-xs bg-emerald-700 text-white px-2 py-1 hover:bg-emerald-800 disabled:opacity-50 whitespace-nowrap">
+                                Send Voucher
                               </button>
                             )}
                             {e.status !== 'lost' && e.status !== 'booked' && e.status !== 'advance_pending' && e.status !== 'advance_confirmed' && (

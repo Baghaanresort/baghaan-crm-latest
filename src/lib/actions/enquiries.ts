@@ -357,6 +357,11 @@ export async function releaseEnquiryHold(enquiryId: string): Promise<ActionResul
     .from('enquiries').select('held_booking_id, status').eq('id', enquiryId).single();
   if (!enq?.['held_booking_id']) return err('No active hold on this enquiry.');
   if (enq['status'] === 'booked') return err('This enquiry is already booked.');
+  // Never release a hold the guest has paid on — cancel + refund explicitly instead.
+  const { data: hp } = await supabase.from('payments').select('id, type').eq('booking_id', enq['held_booking_id'] as string).limit(5);
+  if ((hp ?? []).some((p) => p['type'] !== 'refund')) {
+    return err('This hold has a recorded payment — cancel the booking and process a refund instead of releasing.');
+  }
 
   const now = new Date().toISOString();
   // Cancel the hold booking (keeps the record; frees the rooms from conflict checks
@@ -439,6 +444,87 @@ export async function bookEnquiry(
   return ok({ bookingId, confirmationNumber });
 }
 
+// ---------- sendVoucherAndConfirm ----------
+
+// Sales sends the voucher — that single action confirms the booking. Requires an advance
+// on the books. Flips hold → confirmed, marks the voucher sent, moves the enquiry to
+// "Booking Confirmed", and dispatches the voucher. Re-sending on a confirmed booking just
+// re-dispatches (no status regression). Booking-centric so the reminders panel can call it too.
+export async function sendVoucherAndConfirm(bookingId: string): Promise<ActionResult<{ confirmationNumber: string }>> {
+  if (!bookingId) return err('Booking ID required');
+  const supabase = await createClient();
+  const actor = await getAuthedUser(supabase);
+  if (!actor) return err('Not authenticated');
+  if (!['Sales', 'Sales Admin', 'Admin'].includes(actor.role)) return err('Only Sales and Admin can send vouchers');
+
+  const { data: bk } = await supabase
+    .from('bookings').select('confirmation_number, status, total_amount, source_enquiry_id').eq('id', bookingId).single();
+  if (!bk) return err('Booking not found');
+  const confirmationNumber = bk['confirmation_number'] as string;
+  const now = new Date().toISOString();
+
+  if (bk['status'] === 'hold') {
+    if (Number(bk['total_amount'] ?? 0) <= 0) {
+      return err('Add the total package amount before sending the voucher.');
+    }
+    const { data: pays } = await supabase.from('payments').select('id, type').eq('booking_id', bookingId);
+    const hasAdvance = (pays ?? []).some((p) => p['type'] !== 'refund');
+    if (!hasAdvance) return err('Record the advance payment before sending the voucher.');
+
+    const { error: upBk } = await supabase.from('bookings')
+      .update({ status: 'confirmed', hold_expires_at: null, voucher_sent: true, voucher_sent_at: now }).eq('id', bookingId);
+    if (upBk) { console.error('[sendVoucherAndConfirm booking]', upBk); return err('Failed to confirm booking.'); }
+
+    const enquiryId = bk['source_enquiry_id'] as string | null;
+    if (enquiryId) {
+      await supabase.from('enquiries').update({
+        status: 'booked', linked_booking_id: bookingId, followup_date: null,
+        next_action: `Voucher sent · booking confirmed · ${confirmationNumber}`,
+        updated_by: actor.name, updated_at: now,
+      }).eq('id', enquiryId);
+      await supabase.from('enquiry_activities').insert({
+        id: `ACT-${Date.now()}-vc`, enquiry_id: enquiryId, type: 'booking_created',
+        note: `Voucher sent — booking confirmed ${confirmationNumber}`, created_by: actor.name, created_at: now,
+      });
+    }
+  } else {
+    // Already confirmed (or further along) — just record the voucher send and re-dispatch.
+    await supabase.from('bookings').update({ voucher_sent: true, voucher_sent_at: now }).eq('id', bookingId);
+  }
+
+  await dispatchVoucher(bookingId);
+
+  revalidateEnquiryPaths();
+  revalidatePath('/bookings');
+  revalidatePath('/calendar');
+  revalidatePath('/vouchers');
+  return ok({ confirmationNumber });
+}
+
+// ---------- extendHold ----------
+
+// Push a hold's expiry out by N days (Sales acting on the "expiring soon" reminder).
+export async function extendHold(bookingId: string, days: number): Promise<ActionResult> {
+  if (!bookingId) return err('Booking ID required');
+  const n = Math.max(1, Math.min(30, Math.round(days)));
+  const supabase = await createClient();
+  const actor = await getAuthedUser(supabase);
+  if (!actor) return err('Not authenticated');
+  if (!['Sales', 'Sales Admin', 'Admin'].includes(actor.role)) return err('Only Sales and Admin can extend holds');
+
+  const { data: bk } = await supabase.from('bookings').select('status').eq('id', bookingId).single();
+  if (!bk) return err('Booking not found');
+  if (bk['status'] !== 'hold') return err('Only an active hold can be extended.');
+
+  const newExpiry = new Date(Date.now() + n * 86400000).toISOString();
+  const { error } = await supabase.from('bookings').update({ hold_expires_at: newExpiry }).eq('id', bookingId);
+  if (error) { console.error('[extendHold]', error); return err('Failed to extend hold.'); }
+
+  revalidateEnquiryPaths();
+  revalidatePath('/bookings');
+  return ok(undefined);
+}
+
 // ---------- releaseExpiredEnquiryHolds (lazy expiry) ----------
 
 // Release enquiry-linked holds whose expiry has passed. Called (fire-and-forget) from
@@ -458,6 +544,9 @@ export async function releaseExpiredEnquiryHolds(): Promise<void> {
   for (const b of expired ?? []) {
     const bookingId = b['id'] as string;
     const enquiryId = b['source_enquiry_id'] as string;
+    // Never auto-release a hold the guest has paid on — it surfaces under "Vouchers not sent" instead.
+    const { data: hp } = await supabase.from('payments').select('id, type').eq('booking_id', bookingId).limit(5);
+    if ((hp ?? []).some((p) => p['type'] !== 'refund')) continue;
     await supabase.from('bookings').update({ status: 'cancelled' }).eq('id', bookingId);
     await supabase.from('enquiries').update({
       status: 'in_progress', held_booking_id: null,

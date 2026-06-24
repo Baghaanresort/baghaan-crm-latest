@@ -29,7 +29,7 @@ export async function syncEnquiryStageFromPayment(
 ): Promise<void> {
   const { data: b } = await supabase
     .from('bookings')
-    .select('source_enquiry_id, status')
+    .select('source_enquiry_id, status, hold_expires_at')
     .eq('id', bookingId)
     .single();
 
@@ -52,6 +52,16 @@ export async function syncEnquiryStageFromPayment(
   const hasAny = relevant.length > 0;
 
   const stage = hasAny ? 'advance_confirmed' : 'rooms_blocked';
+
+  // Once an advance lands, push the hold expiry out to now + 2 days (never shorten it), so
+  // a paying guest isn't auto-released before Sales sends the voucher.
+  if (hasAny) {
+    const twoDays = new Date(Date.now() + 2 * 86400000).toISOString();
+    const current = b?.['hold_expires_at'] as string | null;
+    if (!current || current < twoDays) {
+      await supabase.from('bookings').update({ hold_expires_at: twoDays }).eq('id', bookingId);
+    }
+  }
 
   await supabase
     .from('enquiries')
