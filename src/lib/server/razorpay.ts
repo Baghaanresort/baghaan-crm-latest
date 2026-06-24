@@ -65,6 +65,13 @@ export async function createPaymentLink(
   // email notification" validation (which would fail the whole link creation).
   // Set RAZORPAY_NOTIFY=false once your own WhatsApp/email delivery is configured.
   const notifyOn = process.env.RAZORPAY_NOTIFY !== 'false';
+  // Once our own branded email sender is configured (Resend API key + a verified
+  // EMAIL_FROM), WE email the payment link (see sendPaymentRequest). Suppress
+  // Razorpay's duplicate email in that case so the guest doesn't get two. We still
+  // let Razorpay deliver SMS + WhatsApp. If our sender isn't configured, fall back
+  // to Razorpay's email so a link is never left without an email channel.
+  // Override per-channel with RAZORPAY_NOTIFY=false (kills all Razorpay notifications).
+  const ownEmail = !!process.env.RESEND_API_KEY && !!process.env.EMAIL_FROM;
   const body: Record<string, unknown> = {
     amount: args.amountPaise,
     currency: 'INR',
@@ -73,11 +80,7 @@ export async function createPaymentLink(
     customer: args.customer,
     notify: {
       sms: notifyOn && !!args.customer.contact,
-      // Always let Razorpay email the link when the customer has an email. (Don't suppress
-      // it just because RESEND_API_KEY exists — our Resend can't reach guests until a domain
-      // is verified, so suppressing would kill the only working email.) Once your own branded
-      // email + a verified domain are live, set RAZORPAY_NOTIFY=false to switch delivery over.
-      email: notifyOn && !!args.customer.email,
+      email: notifyOn && !!args.customer.email && !ownEmail,
       whatsapp: notifyOn && !!args.customer.contact,
     },
     reminder_enable: true,
