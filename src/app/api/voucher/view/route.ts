@@ -1,9 +1,11 @@
 import { NextRequest } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { dbToBooking } from '@/lib/mappers/booking';
-import { getVerifiedPaymentsForBooking } from '@/lib/queries/payments';
+import { dbToPayment } from '@/lib/mappers/payment';
 import { buildVoucherHTML } from '@/lib/utils/print';
 import { verifyVoucherToken } from '@/lib/server/voucher-token';
+
+export const runtime = 'nodejs';
 
 export async function GET(request: NextRequest) {
   const bookingId = request.nextUrl.searchParams.get('bookingId');
@@ -11,11 +13,15 @@ export async function GET(request: NextRequest) {
   if (!bookingId || !token) return new Response('Missing params', { status: 400 });
   if (!verifyVoucherToken(bookingId, token)) return new Response('Invalid link', { status: 403 });
 
-  const supabase = await createClient();
-  const { data, error } = await supabase.from('bookings').select('*').eq('id', bookingId).single();
+  // The signed token authorizes this exact booking; guests have no session, so
+  // read via the admin client (RLS would otherwise return nothing for anon).
+  const db = createAdminClient();
+  const { data, error } = await db.from('bookings').select('*').eq('id', bookingId).single();
   if (error || !data) return new Response('Not found', { status: 404 });
 
-  const payments = await getVerifiedPaymentsForBooking(bookingId);
+  const { data: payRows } = await db.from('payments').select('*')
+    .eq('booking_id', bookingId).eq('verified', true).order('payment_date', { ascending: true });
+  const payments = (payRows ?? []).map(dbToPayment);
   const html = buildVoucherHTML(dbToBooking(data), payments);
 
   // Floating "Download PDF" button for the guest (hidden when printing).
