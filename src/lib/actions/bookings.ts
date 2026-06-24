@@ -167,6 +167,8 @@ export async function createBlockedRoom(
     checkInDetails: null,
     advanceRequired: parsed.data.advanceRequired ?? 0,
     advancePaid: 0,
+    voucherSent: false,
+    voucherSentAt: null,
     inclusions: '',
     remarks: parsed.data.notes ?? '',
     specialRequests: '',

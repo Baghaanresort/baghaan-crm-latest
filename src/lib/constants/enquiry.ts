@@ -30,8 +30,8 @@ export const ENQUIRY_STATUSES: Record<
   in_progress: { label: 'In Progress', color: 'bg-amber-100 text-amber-800', dot: 'bg-amber-500' },
   rooms_blocked: { label: 'Rooms Blocked', color: 'bg-orange-100 text-orange-800', dot: 'bg-orange-500' },
   advance_pending: { label: 'Advance Pending', color: 'bg-purple-100 text-purple-800', dot: 'bg-purple-500' },
-  advance_confirmed: { label: 'Advance Payment Confirmed', color: 'bg-teal-100 text-teal-800', dot: 'bg-teal-600' },
-  booked: { label: 'Booked', color: 'bg-emerald-100 text-emerald-800', dot: 'bg-emerald-600' },
+  advance_confirmed: { label: 'Advance Payment Received', color: 'bg-teal-100 text-teal-800', dot: 'bg-teal-600' },
+  booked: { label: 'Booking Confirmed', color: 'bg-emerald-100 text-emerald-800', dot: 'bg-emerald-600' },
   lost: { label: 'Lost', color: 'bg-stone-100 text-stone-600', dot: 'bg-stone-400' },
 };
 

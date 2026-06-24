@@ -1,11 +1,14 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useTransition } from 'react';
+import { useRouter } from 'next/navigation';
+import { toast } from 'sonner';
+import { sendVoucherAndConfirm, extendHold } from '@/lib/actions/enquiries';
 import {
   Plus, Calendar, Building2,
   BedDouble, Users, TrendingUp, Clock, CreditCard,
   ArrowUpRight, ArrowDownRight, Home, CheckCircle2,
-  AlertCircle, DollarSign, BarChart3, Percent
+  AlertCircle, DollarSign, BarChart3, Percent, Send, FileText
 } from 'lucide-react';
 import type { Booking } from '@/lib/types/booking';
 import type { Payment } from '@/lib/types/payment';
@@ -54,9 +57,29 @@ export function DashboardClient({ bookings, payments, users, currentUser, today 
   const [showBlock, setShowBlock] = useState(false);
   const [paymentFor, setPaymentFor] = useState<Booking | null>(null);
   const [finalBillFor, setFinalBillFor] = useState<Booking | null>(null);
+  const [isPending, startTransition] = useTransition();
+  const [nowMs] = useState(() => Date.now()); // captured once; pure inside render/memo
+  const router = useRouter();
 
   const pStats = useMemo(() => (b: Booking) => getBookingPaymentStatus(b, payments), [payments]);
   const effStatus = useMemo(() => (b: Booking) => getEffectiveStatus(b, payments), [payments]);
+
+  const handleSendVoucher = (b: Booking) => {
+    startTransition(async () => {
+      const r = await sendVoucherAndConfirm(b.id);
+      if (!r.success) { toast.error(r.error); return; }
+      toast.success(`Voucher sent · booking confirmed · ${r.data.confirmationNumber}`);
+      router.refresh();
+    });
+  };
+  const handleExtend = (b: Booking, days: number) => {
+    startTransition(async () => {
+      const r = await extendHold(b.id, days);
+      if (!r.success) { toast.error(r.error); return; }
+      toast.success(`Hold extended by ${days} day${days > 1 ? 's' : ''}`);
+      router.refresh();
+    });
+  };
 
   const stats = useMemo(() => {
     const arrivingToday = bookings.filter(b => b.arrival === today && effStatus(b) !== 'hold');
@@ -67,6 +90,13 @@ export function DashboardClient({ bookings, payments, users, currentUser, today 
     const myBookings = bookings.filter(b => b.createdBy === currentUser.name);
     const myRevenue = myBookings.filter(b => effStatus(b) !== 'hold').reduce((s, b) => s + b.totalAmount, 0);
     const activeHolds = bookings.filter(b => effStatus(b) === 'hold' && b.departure > today).sort((a, b) => (a.holdExpiresAt ?? '').localeCompare(b.holdExpiresAt ?? ''));
+    // Paid holds whose voucher hasn't gone out yet — "Advance Payment Received", awaiting the voucher.
+    const vouchersToSend = bookings.filter(b => b.status === 'hold' && !b.voucherSent && pStats(b).totalPaid > 0)
+      .sort((a, b) => (a.holdExpiresAt ?? '').localeCompare(b.holdExpiresAt ?? ''));
+    // Unpaid holds within 24h of expiry (or already past) — nudge Sales to extend/follow up.
+    const soonIso = new Date(nowMs + 24 * 3600000).toISOString();
+    const holdsExpiringSoon = bookings.filter(b => b.status === 'hold' && pStats(b).totalPaid === 0 && !!b.holdExpiresAt && b.holdExpiresAt <= soonIso)
+      .sort((a, b) => (a.holdExpiresAt ?? '').localeCompare(b.holdExpiresAt ?? ''));
     const holdValue = activeHolds.reduce((s, b) => s + b.totalAmount, 0);
     const btcOpen = bookings.filter(b => b.finalBill?.isBTC && pStats(b).balance > 0);
     const btcOpenAmount = btcOpen.reduce((s, b) => s + pStats(b).balance, 0);
@@ -96,7 +126,7 @@ export function DashboardClient({ bookings, payments, users, currentUser, today 
     const revpar = adr * (occupancyRate / 100);
     const collectionGap = Math.max(0, expectedRevenueThisMonth - moneyReceivedThisMonth);
 
-    return { arrivingToday, departingToday, inHouse, upcoming, totalRevenue, myBookings, myRevenue, activeHolds, holdValue, btcOpen, btcOpenAmount, collectedThisMonth, advanceThisMonth, expectedRevenueThisMonth, actualRevenueThisMonth, moneyReceivedThisMonth, resortReceivedThisMonth, resortByMode, roomNightsThisMonth, expectedAtResortThisMonth, occupancyRate, adr, revpar, collectionGap };
+    return { arrivingToday, departingToday, inHouse, upcoming, totalRevenue, myBookings, myRevenue, activeHolds, holdValue, vouchersToSend, holdsExpiringSoon, btcOpen, btcOpenAmount, collectedThisMonth, advanceThisMonth, expectedRevenueThisMonth, actualRevenueThisMonth, moneyReceivedThisMonth, resortReceivedThisMonth, resortByMode, roomNightsThisMonth, expectedAtResortThisMonth, occupancyRate, adr, revpar, collectionGap };
   }, [bookings, payments, today, currentUser.name, effStatus, pStats]);
 
   const agentStats = useMemo(() => {
@@ -227,6 +257,76 @@ export function DashboardClient({ bookings, payments, users, currentUser, today 
                       </span>
                     </td>
                     <td className="py-2 text-right font-semibold">₹{ps.balance.toLocaleString('en-IN')}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </AlertSection>
+      )}
+
+      {(isSales || isAdmin) && stats.vouchersToSend.length > 0 && (
+        <AlertSection color="emerald" icon={<FileText size={15} />} title="Vouchers to Send" badge={stats.vouchersToSend.length} subtitle="Advance received — send the voucher to confirm the booking">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-xs text-emerald-800 uppercase border-b border-emerald-100">
+                <th className="text-left pb-2 pt-1">Guest</th>
+                <th className="text-left pb-2 pt-1">Stay</th>
+                <th className="text-left pb-2 pt-1">Hold expires</th>
+                <th className="text-left pb-2 pt-1">Agent</th>
+                <th className="text-right pb-2 pt-1">Paid</th>
+                <th className="text-right pb-2 pt-1">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {stats.vouchersToSend.map(b => {
+                const ps = pStats(b);
+                return (
+                  <tr key={b.id} className="border-b border-emerald-50 last:border-0">
+                    <td className="py-2"><div className="flex items-center gap-2"><Avatar name={b.guestName} color="emerald" /><div><div className="font-medium">{b.guestName}</div><div className="text-xs text-stone-500">{b.contactNumber}</div></div></div></td>
+                    <td className="py-2 text-xs">{fmtDate(b.arrival)} · {b.nights}n</td>
+                    <td className="py-2 text-xs text-stone-500">{b.holdExpiresAt ? fmtRelative(b.holdExpiresAt) : '—'}</td>
+                    <td className="py-2 text-xs text-stone-500">{b.createdBy}</td>
+                    <td className="py-2 text-right text-emerald-700 font-medium">₹{ps.totalPaid.toLocaleString('en-IN')}</td>
+                    <td className="py-2 text-right">
+                      <button onClick={() => handleSendVoucher(b)} disabled={isPending} className="inline-flex items-center gap-1 text-xs bg-emerald-700 text-white px-3 py-1 hover:bg-emerald-800 rounded-md font-medium disabled:opacity-50"><Send size={11} /> Send Voucher</button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </AlertSection>
+      )}
+
+      {(isSales || isAdmin) && stats.holdsExpiringSoon.length > 0 && (
+        <AlertSection color="red" icon={<Clock size={15} />} title="Holds Expiring Soon" badge={stats.holdsExpiringSoon.length} subtitle="Unpaid holds within 24h — extend or follow up before the rooms are released">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-xs text-red-700 uppercase border-b border-red-100">
+                <th className="text-left pb-2 pt-1">Guest</th>
+                <th className="text-left pb-2 pt-1">Stay</th>
+                <th className="text-left pb-2 pt-1">Expires</th>
+                <th className="text-left pb-2 pt-1">Agent</th>
+                <th className="text-right pb-2 pt-1">Extend</th>
+              </tr>
+            </thead>
+            <tbody>
+              {stats.holdsExpiringSoon.map(b => {
+                const expired = b.holdExpiresAt && new Date(b.holdExpiresAt) < new Date();
+                return (
+                  <tr key={b.id} className="border-b border-red-50 last:border-0">
+                    <td className="py-2"><div className="flex items-center gap-2"><Avatar name={b.guestName} color="red" /><div><div className="font-medium">{b.guestName}</div><div className="text-xs text-stone-500">{b.contactNumber}</div></div></div></td>
+                    <td className="py-2 text-xs">{fmtDate(b.arrival)} · {b.nights}n</td>
+                    <td className="py-2"><span className={`text-xs px-2 py-0.5 rounded-full font-medium ${expired ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-800'}`}>{b.holdExpiresAt ? (expired ? '⚠ Expired' : fmtRelative(b.holdExpiresAt)) : '—'}</span></td>
+                    <td className="py-2 text-xs text-stone-500">{b.createdBy}</td>
+                    <td className="py-2 text-right">
+                      <div className="inline-flex gap-1">
+                        <button onClick={() => handleExtend(b, 1)} disabled={isPending} className="text-xs border border-red-300 text-red-700 px-2 py-1 hover:bg-red-50 rounded-md disabled:opacity-50">+1d</button>
+                        <button onClick={() => handleExtend(b, 2)} disabled={isPending} className="text-xs border border-red-300 text-red-700 px-2 py-1 hover:bg-red-50 rounded-md disabled:opacity-50">+2d</button>
+                        <button onClick={() => handleExtend(b, 7)} disabled={isPending} className="text-xs border border-red-300 text-red-700 px-2 py-1 hover:bg-red-50 rounded-md disabled:opacity-50">+7d</button>
+                      </div>
+                    </td>
                   </tr>
                 );
               })}
@@ -589,6 +689,7 @@ const ALERT_COLORS: Record<string, { bg: string; border: string; title: string; 
   blue: { bg: 'bg-blue-50/50', border: 'border-l-blue-500', title: 'text-blue-900', badge: 'bg-blue-100 text-blue-700' },
   indigo: { bg: 'bg-indigo-50/50', border: 'border-l-indigo-500', title: 'text-indigo-900', badge: 'bg-indigo-100 text-indigo-700' },
   red: { bg: 'bg-red-50/50', border: 'border-l-red-500', title: 'text-red-900', badge: 'bg-red-100 text-red-700' },
+  emerald: { bg: 'bg-emerald-50/50', border: 'border-l-emerald-500', title: 'text-emerald-900', badge: 'bg-emerald-100 text-emerald-700' },
 };
 
 function AlertSection({ color, icon, title, badge, subtitle, children }: {

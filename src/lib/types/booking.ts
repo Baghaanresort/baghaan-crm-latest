@@ -112,6 +112,8 @@ export interface Booking {
   checkInDetails: CheckInDetails | null;
   advanceRequired: number;
   advancePaid: number;
+  voucherSent: boolean;
+  voucherSentAt: string | null;
   inclusions: string;
   remarks: string;
   specialRequests: string;
