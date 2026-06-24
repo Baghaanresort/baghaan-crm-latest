@@ -1,7 +1,7 @@
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { sendWhatsAppTemplate } from '@/lib/server/whatsapp';
-import { sendEmail } from '@/lib/server/email';
+import { sendEmail, type EmailAttachment } from '@/lib/server/email';
 import { outboundMessageToDb } from '@/lib/mappers/transactions';
 import { formatINR } from '@/lib/utils/money';
 import { voucherEmail, paymentRequestEmail, paymentReceiptEmail, refundNoticeEmail } from '@/lib/server/email-templates';
@@ -63,7 +63,7 @@ function emailConfigured(): boolean {
 async function deliver(
   supabase: SupabaseClient, b: MsgBooking, channel: OutboundChannel, purpose: OutboundPurpose,
   template: string | undefined, params: string[], mediaUrl: string | undefined,
-  emailSubject: string, emailHtml: string,
+  emailSubject: string, emailHtml: string, emailAttachments?: EmailAttachment[],
 ): Promise<void> {
   try {
     if (channel === 'whatsapp') {
@@ -73,7 +73,7 @@ async function deliver(
         destination: b.contactNumber, template, provider: r.provider, providerMessageId: r.providerMessageId, status: 'sent' });
     } else {
       if (!b.email || !emailConfigured()) return;
-      const r = await sendEmail(b.email, emailSubject, emailHtml);
+      const r = await sendEmail(b.email, emailSubject, emailHtml, emailAttachments);
       await logOutbound(supabase, { bookingId: b.id, enquiryId: b.enquiryId ?? null, channel, purpose,
         destination: b.email, provider: r.provider, providerMessageId: r.providerMessageId, status: 'sent' });
     }
@@ -95,12 +95,23 @@ export async function sendPaymentRequest(
   await deliver(supabase, b, 'email', 'payment_request', undefined, [], undefined, e.subject, e.html);
 }
 
-export async function sendVoucher(supabase: SupabaseClient, b: MsgBooking, voucherUrl: string): Promise<void> {
+// `pdf` (the rendered voucher) is attached to the email and used as the WhatsApp
+// document, so the guest receives the actual PDF — like an OTA confirmation.
+export async function sendVoucher(
+  supabase: SupabaseClient, b: MsgBooking, voucherUrl: string, pdf?: Buffer | null,
+): Promise<void> {
   const e = voucherEmail(b, voucherUrl);
+  const pdfUrl = voucherUrl.replace('/api/voucher/view', '/api/pdf/voucher');
+  const filename = `Voucher-${(b.confirmationNumber || 'BAGHAAN').replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'voucher'}.pdf`;
+  const attachments: EmailAttachment[] | undefined = pdf && pdf.length
+    ? [{ filename, content: pdf.toString('base64'), contentType: 'application/pdf' }]
+    : undefined;
+
+  // WhatsApp gets the PDF link as the document media; email gets the file attached.
   await deliver(supabase, b, 'whatsapp', 'voucher',
-    process.env.WHATSAPP_TEMPLATE_VOUCHER, [b.guestName, b.confirmationNumber, voucherUrl], voucherUrl,
+    process.env.WHATSAPP_TEMPLATE_VOUCHER, [b.guestName, b.confirmationNumber, voucherUrl], pdfUrl,
     e.subject, e.html);
-  await deliver(supabase, b, 'email', 'voucher', undefined, [], undefined, e.subject, e.html);
+  await deliver(supabase, b, 'email', 'voucher', undefined, [], undefined, e.subject, e.html, attachments);
 }
 
 export async function sendPaymentReceipt(supabase: SupabaseClient, b: MsgBooking, amountRupees: number): Promise<void> {
