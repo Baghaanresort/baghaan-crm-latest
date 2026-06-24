@@ -43,9 +43,10 @@ export const styles = StyleSheet.create({
     fontWeight: 600,
     fontSize: 26,
     letterSpacing: 6,
+    lineHeight: 1.3,
     color: colors.emerald,
   },
-  brandSub: { fontSize: 7, letterSpacing: 4, color: colors.amberText, marginTop: 2 },
+  brandSub: { fontSize: 7, letterSpacing: 4, lineHeight: 1.4, color: colors.amberText, marginTop: 2 },
   brandLine: { fontSize: 8, color: colors.muted, marginTop: 2 },
 
   docTitle: {

@@ -97,7 +97,12 @@ export function VoucherPdf({ booking: b, payments = [] }: VoucherPdfProps) {
           <>
             <Text style={s.h3}>Inclusions</Text>
             <View style={{ padding: 6 }}>
-              {inclusions.map((l, i) => <Text key={i} style={{ fontSize: 8.5, marginBottom: 1 }}>{`▪ ${l}`}</Text>)}
+              {inclusions.map((l, i) => (
+                <View key={i} style={{ flexDirection: 'row', marginBottom: 1.5 }}>
+                  <View style={{ width: 3, height: 3, borderRadius: 1.5, backgroundColor: colors.emerald, marginTop: 4, marginRight: 6 }} />
+                  <Text style={{ fontSize: 8.5, flexGrow: 1, flexBasis: 0 }}>{l}</Text>
+                </View>
+              ))}
             </View>
           </>
         )}

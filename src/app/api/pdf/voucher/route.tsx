@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { verifyVoucherToken } from '@/lib/server/voucher-token';
-import { renderVoucher } from '@/lib/server/voucher-pdf-store';
+import { getOrCreateVoucherPdf } from '@/lib/server/voucher-pdf-store';
 
 export const runtime = 'nodejs';
 
@@ -33,8 +33,8 @@ export async function GET(request: NextRequest) {
     confirmation = (bk['confirmation_number'] as string) ?? '';
   }
 
-  // Authorization passed above; render fresh from current data.
-  const buffer = await renderVoucher(bookingId);
+  // Authorization passed above; serve the stored (content-addressed) PDF from the bucket.
+  const buffer = await getOrCreateVoucherPdf(bookingId);
   if (!buffer) return new Response('Failed to generate PDF', { status: 500 });
 
   const filename = `Voucher-${slug(confirmation)}.pdf`;
