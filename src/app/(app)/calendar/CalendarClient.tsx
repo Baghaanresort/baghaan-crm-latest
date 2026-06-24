@@ -17,6 +17,15 @@ import { BookingTooltip } from '@/components/calendar/BookingTooltip';
 import type { TooltipData } from '@/components/calendar/BookingTooltip';
 import { LegendPanel } from '@/components/calendar/LegendPanel';
 
+import dynamic from 'next/dynamic';
+import { Search } from 'lucide-react';
+import { useCurrentUser } from '@/context/UserContext';
+
+const RoomAvailabilityModal = dynamic(
+  () => import('@/components/calendar/RoomAvailabilityModal').then((m) => ({ default: m.RoomAvailabilityModal })),
+  { ssr: false },
+);
+
 const CELL_WIDTH = 36;
 const ROW_HEIGHT = 40;
 const SIDEBAR_WIDTH = 160;
@@ -68,6 +77,11 @@ export function CalendarClient({ initialBookings: bookings, maintenanceBlocks }:
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('All');
   const [guestSearch, setGuestSearch] = useState('');
   const [tooltip, setTooltip] = useState<{ data: TooltipData; x: number; y: number } | null>(null);
+
+  const currentUser = useCurrentUser();
+  const canCheckAvailability =
+    currentUser?.role === 'Sales' || currentUser?.role === 'Sales Admin' || currentUser?.role === 'Admin';
+  const [showAvailability, setShowAvailability] = useState(false);
 
   // Month calculation
   const { year, month, days, monthLabel } = useMemo(() => {
@@ -316,7 +330,26 @@ export function CalendarClient({ initialBookings: bookings, maintenanceBlocks }:
         onToday={() => setMonthOffset(0)}
       />
 
+      {canCheckAvailability && (
+        <div className="px-4 pt-3">
+          <button
+            onClick={() => setShowAvailability(true)}
+            className="inline-flex items-center gap-2 bg-emerald-800 text-amber-50 text-sm px-4 py-2 hover:bg-emerald-700 transition tracking-wide"
+          >
+            <Search size={14} /> Check Availability
+          </button>
+        </div>
+      )}
+
       <OccupancyKPIs kpis={kpis} />
+
+      {showAvailability && (
+        <RoomAvailabilityModal
+          bookings={bookings}
+          maintenanceBlocks={maintenanceBlocks}
+          onClose={() => setShowAvailability(false)}
+        />
+      )}
 
       <OccupancyFilters
         roomTypeFilter={roomTypeFilter}
