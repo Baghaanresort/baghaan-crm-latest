@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { X, Search } from 'lucide-react';
 import type { Booking } from '@/lib/types/booking';
 import { computeAvailability, type MaintenanceLike } from '@/lib/utils/availability';
+import { fmtDate } from '@/lib/utils/date';
 
 interface Props {
   bookings: Booking[];
@@ -21,6 +22,13 @@ function localDate(offsetDays = 0): string {
 function nightsBetween(checkIn: string, checkOut: string): number {
   const ms = new Date(checkOut).getTime() - new Date(checkIn).getTime();
   return Math.round(ms / 86400000);
+}
+
+// Add days to a YYYY-MM-DD string (parsed as local, so no UTC off-by-one).
+function addDays(dateStr: string, n: number): string {
+  const d = new Date(dateStr + 'T00:00:00');
+  d.setDate(d.getDate() + n);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 const inr = (n: number) => `₹${n.toLocaleString('en-IN')}`;
@@ -51,15 +59,23 @@ export function RoomAvailabilityModal({ bookings, maintenanceBlocks, onClose }: 
         <div className="p-5 space-y-4">
           <div className="flex items-end gap-3">
             <label className="flex-1 text-xs text-stone-600">Check-in
-              <input type="date" value={checkIn} max={checkOut} onChange={(e) => setCheckIn(e.target.value)}
+              {/* No `max`: any check-in is selectable. Picking one on/after the current
+                  check-out auto-advances check-out to the next day, so selection never dead-ends. */}
+              <input type="date" lang="en-IN" value={checkIn}
+                onChange={(e) => { const v = e.target.value; if (!v) return; setCheckIn(v); if (v >= checkOut) setCheckOut(addDays(v, 1)); }}
                 className="mt-1 w-full border border-stone-300 px-2 py-1.5 text-sm outline-none focus:border-emerald-700" />
             </label>
             <label className="flex-1 text-xs text-stone-600">Check-out
-              <input type="date" value={checkOut} min={checkIn} onChange={(e) => setCheckOut(e.target.value)}
+              <input type="date" lang="en-IN" value={checkOut} min={addDays(checkIn, 1)}
+                onChange={(e) => { if (e.target.value) setCheckOut(e.target.value); }}
                 className="mt-1 w-full border border-stone-300 px-2 py-1.5 text-sm outline-none focus:border-emerald-700" />
             </label>
-            <div className="text-xs text-stone-500 pb-2 whitespace-nowrap">{valid ? `${nights} night${nights === 1 ? '' : 's'}` : ''}</div>
           </div>
+
+          <p className="text-sm text-stone-700">
+            {fmtDate(checkIn)} <span className="text-stone-400">→</span> {fmtDate(checkOut)}
+            {valid && <span className="text-stone-500"> · {nights} night{nights === 1 ? '' : 's'}</span>}
+          </p>
 
           {!valid ? (
             <p className="text-sm text-red-600">Check-out must be after check-in.</p>
