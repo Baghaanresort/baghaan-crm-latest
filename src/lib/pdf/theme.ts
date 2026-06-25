@@ -28,6 +28,7 @@ export const styles = StyleSheet.create({
     color: colors.ink,
     paddingVertical: 28,
     paddingHorizontal: 34,
+    textTransform: 'uppercase',
   },
 
   // Header
