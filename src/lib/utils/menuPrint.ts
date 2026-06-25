@@ -41,7 +41,7 @@ export function buildMenuHTML(items: MenuItem[]): string {
   <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;0,600;1,400&family=Cormorant+Garamond:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
     * { box-sizing: border-box; }
-    body { font-family: 'Lora', Georgia, serif; font-size: 12px; line-height: 1.5; color: #1c1917; padding: 30px; max-width: 750px; margin: 0 auto; }
+    body { font-family: 'Lora', Georgia, serif; font-size: 12px; line-height: 1.5; color: #1c1917; padding: 30px; max-width: 750px; margin: 0 auto; text-transform: uppercase; }
     .header { text-align: center; padding-bottom: 16px; border-bottom: 2px solid #d97706; margin-bottom: 20px; }
     .header h1 { font-family: 'Cormorant Garamond', serif; font-weight: 600; font-size: 32px; letter-spacing: 0.25em; color: #064e3b; margin: 0; }
     .header .sub { font-size: 10px; letter-spacing: 0.4em; color: #b45309; margin-top: 4px; }
