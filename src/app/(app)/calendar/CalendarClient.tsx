@@ -11,7 +11,6 @@ import { OccupancyHeader } from '@/components/calendar/OccupancyHeader';
 import { OccupancyKPIs } from '@/components/calendar/OccupancyKPIs';
 import { OccupancyFilters } from '@/components/calendar/OccupancyFilters';
 import type { RoomTypeFilter, StatusFilter } from '@/components/calendar/OccupancyFilters';
-import { OccupancyHeatmap } from '@/components/calendar/OccupancyHeatmap';
 import { CalendarGrid } from '@/components/calendar/CalendarGrid';
 import { BookingTooltip } from '@/components/calendar/BookingTooltip';
 import type { TooltipData } from '@/components/calendar/BookingTooltip';
@@ -327,21 +326,13 @@ export function CalendarClient({ initialBookings: bookings, maintenanceBlocks }:
         onGuestSearchChange={setGuestSearch}
       />
 
-      {/* Calendar grid with heatmap */}
-      <div className="overflow-x-auto" style={{ position: 'relative' }}>
-        {/* Heatmap row */}
-        <div style={{ minWidth: SIDEBAR_WIDTH + days.length * CELL_WIDTH }}>
-          <OccupancyHeatmap
-            days={dayOccupancy}
-            cellWidth={CELL_WIDTH}
-            sidebarWidth={SIDEBAR_WIDTH}
-          />
-        </div>
-
-        {/* Main grid */}
+      {/* Calendar grid — heatmap, day-number header, and room rows all live in a
+          single scroll container so they share one horizontal scroll and stay aligned. */}
+      <div style={{ position: 'relative' }}>
         <CalendarGrid
           rooms={filteredRooms}
           days={days}
+          dayOccupancy={dayOccupancy}
           bookingsByRoom={bookingsByRoom}
           maintenanceByRoom={maintenanceByRoom}
           cellWidth={CELL_WIDTH}
