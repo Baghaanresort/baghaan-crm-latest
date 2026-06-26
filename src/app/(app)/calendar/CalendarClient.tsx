@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useCallback } from 'react';
 import { ROOM_INVENTORY, getRoomCategory } from '@/lib/constants/rooms';
-import { isoDate, daysBetween } from '@/lib/utils/date';
+import { visibleBarSegment } from '@/lib/utils/date';
 import type { Booking } from '@/lib/types/booking';
 import type { RoomCategory } from '@/lib/constants/rooms';
 import type { MaintenanceBlock } from './page';
@@ -118,6 +118,9 @@ export function CalendarClient({ initialBookings: bookings, maintenanceBlocks }:
     return m;
   }, [days]);
 
+  // Ordered cell dates — passed to visibleBarSegment for the strip bounds.
+  const dayDates = useMemo(() => days.map((d) => d.date), [days]);
+
   // All rooms flat
   const allRoomRows = useMemo(() => {
     return Object.entries(ROOM_INVENTORY).flatMap(([cat, rooms]) =>
@@ -159,36 +162,17 @@ export function CalendarClient({ initialBookings: bookings, maintenanceBlocks }:
 
     filteredBookings.forEach((booking) => {
       (booking.rooms ?? []).forEach((room) => {
-        // Clamp booking to visible month
-        const arrivalDate = booking.arrival < days[0]!.date ? days[0]!.date : booking.arrival;
-        const departureDate =
-          booking.departure > days[days.length - 1]!.date
-            ? days[days.length - 1]!.date
-            : booking.departure;
-
-        const startIdx = dateIndexMap.get(arrivalDate);
-        if (startIdx === undefined) return;
-
-        // Calculate visible nights
-        const endIdx = dateIndexMap.get(departureDate);
-        const visibleNights =
-          endIdx !== undefined
-            ? endIdx - startIdx
-            : days.length - startIdx;
-
-        if (visibleNights <= 0) return;
-
-        // Check if booking overlaps with this month
-        if (booking.departure <= days[0]!.date || booking.arrival > days[days.length - 1]!.date) return;
+        const seg = visibleBarSegment(booking.arrival, booking.departure, dayDates, dateIndexMap);
+        if (!seg) return;
 
         const existing = map.get(room) ?? [];
-        existing.push({ booking, startIdx, nights: visibleNights });
+        existing.push({ booking, startIdx: seg.startIdx, nights: seg.nights });
         map.set(room, existing);
       });
     });
 
     return map;
-  }, [filteredBookings, days, dateIndexMap]);
+  }, [filteredBookings, dayDates, dateIndexMap]);
 
   // Build maintenanceByRoom for current month
   const maintenanceByRoom = useMemo(() => {
@@ -197,33 +181,16 @@ export function CalendarClient({ initialBookings: bookings, maintenanceBlocks }:
     if (statusFilter === 'confirmed' || statusFilter === 'hold') return map;
 
     maintenanceBlocks.forEach((block) => {
-      if (block.dateTo <= days[0]!.date || block.dateFrom > days[days.length - 1]!.date) return;
-
-      const arrivalDate = block.dateFrom < days[0]!.date ? days[0]!.date : block.dateFrom;
-      const departureDate =
-        block.dateTo > days[days.length - 1]!.date
-          ? days[days.length - 1]!.date
-          : block.dateTo;
-
-      const startIdx = dateIndexMap.get(arrivalDate);
-      if (startIdx === undefined) return;
-
-      const endDate = new Date(departureDate);
-      const endIdx = dateIndexMap.get(isoDate(endDate));
-      const visibleNights =
-        endIdx !== undefined
-          ? endIdx - startIdx
-          : days.length - startIdx;
-
-      if (visibleNights <= 0) return;
+      const seg = visibleBarSegment(block.dateFrom, block.dateTo, dayDates, dateIndexMap);
+      if (!seg) return;
 
       const existing = map.get(block.roomName) ?? [];
-      existing.push({ block, startIdx, nights: visibleNights });
+      existing.push({ block, startIdx: seg.startIdx, nights: seg.nights });
       map.set(block.roomName, existing);
     });
 
     return map;
-  }, [maintenanceBlocks, days, dateIndexMap, statusFilter]);
+  }, [maintenanceBlocks, dayDates, dateIndexMap, statusFilter]);
 
   // Filter rooms based on filters
   const filteredRooms = useMemo(() => {

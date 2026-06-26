@@ -33,6 +33,39 @@ export function daysBetween(a: string, b: string): number {
   return Math.max(0, Math.round(ms / 86400000));
 }
 
+// Where a half-open stay [arrival, departure) renders on a strip of consecutive
+// day-cells. A cell for date D is occupied when `arrival <= D < departure`.
+// Returns the start cell index and how many cells it spans, or null if the stay
+// doesn't intersect the strip. `dateIndex` maps each cell date → its index.
+//
+// Crucially, a stay that departs AFTER the last visible cell occupies through the
+// last cell *inclusive* (endIdx = strip length) — clamping departure back into the
+// strip would drop that final cell (off-by-one), hiding e.g. a booking that arrives
+// on the 30th and checks out on the 1st of next month.
+export function visibleBarSegment(
+  arrival: string,
+  departure: string,
+  dayDates: string[],
+  dateIndex: Map<string, number>,
+): { startIdx: number; nights: number } | null {
+  const n = dayDates.length;
+  if (n === 0) return null;
+  const first = dayDates[0]!;
+  const last = dayDates[n - 1]!;
+  // Entirely outside the strip (departure is exclusive, so == first means no overlap).
+  if (departure <= first || arrival > last) return null;
+
+  const startDate = arrival < first ? first : arrival;
+  const startIdx = dateIndex.get(startDate);
+  if (startIdx === undefined) return null;
+
+  const endIdx = departure > last ? n : dateIndex.get(departure);
+  if (endIdx === undefined) return null;
+
+  const nights = endIdx - startIdx;
+  return nights > 0 ? { startIdx, nights } : null;
+}
+
 export function datesInRange(start: string, end: string): string[] {
   const out: string[] = [];
   const s = new Date(start);

@@ -5,6 +5,7 @@ import { X, Search } from 'lucide-react';
 import type { Booking } from '@/lib/types/booking';
 import { computeAvailability, type MaintenanceLike } from '@/lib/utils/availability';
 import { fmtDate } from '@/lib/utils/date';
+import { DateInput } from '@/components/ui/DateInput';
 
 interface Props {
   bookings: Booking[];
@@ -57,19 +58,28 @@ export function RoomAvailabilityModal({ bookings, maintenanceBlocks, onClose }: 
         </div>
 
         <div className="p-5 space-y-4">
+          {/* DateInput shows the value as dd/mm/yyyy (not the browser's US locale) and
+              opens the OS picker on click — same control used across the app.
+              Check-in carries no `max`, so any date is selectable; picking one on/after
+              the current check-out auto-advances check-out, so selection never dead-ends. */}
           <div className="flex items-end gap-3">
-            <label className="flex-1 text-xs text-stone-600">Check-in
-              {/* No `max`: any check-in is selectable. Picking one on/after the current
-                  check-out auto-advances check-out to the next day, so selection never dead-ends. */}
-              <input type="date" lang="en-IN" value={checkIn}
-                onChange={(e) => { const v = e.target.value; if (!v) return; setCheckIn(v); if (v >= checkOut) setCheckOut(addDays(v, 1)); }}
-                className="mt-1 w-full border border-stone-300 px-2 py-1.5 text-sm outline-none focus:border-emerald-700" />
-            </label>
-            <label className="flex-1 text-xs text-stone-600">Check-out
-              <input type="date" lang="en-IN" value={checkOut} min={addDays(checkIn, 1)}
-                onChange={(e) => { if (e.target.value) setCheckOut(e.target.value); }}
-                className="mt-1 w-full border border-stone-300 px-2 py-1.5 text-sm outline-none focus:border-emerald-700" />
-            </label>
+            <div className="flex-1">
+              <span className="text-xs text-stone-600">Check-in</span>
+              <DateInput
+                value={checkIn}
+                onChange={(v) => { if (!v) return; setCheckIn(v); if (v >= checkOut) setCheckOut(addDays(v, 1)); }}
+                className="mt-1"
+              />
+            </div>
+            <div className="flex-1">
+              <span className="text-xs text-stone-600">Check-out</span>
+              <DateInput
+                value={checkOut}
+                min={addDays(checkIn, 1)}
+                onChange={(v) => { if (v) setCheckOut(v); }}
+                className="mt-1"
+              />
+            </div>
           </div>
 
           <p className="text-sm text-stone-700">
