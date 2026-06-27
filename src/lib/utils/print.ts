@@ -5,6 +5,16 @@ import type { BillingEntity } from '@/lib/constants/billing';
 import { fmtDate, datesInRange } from '@/lib/utils/date';
 import { getRoomCategory } from '@/lib/constants/rooms';
 import { numberToIndianWords } from '@/lib/utils/currency';
+import { INCLUDED_ACTIVITIES, PAID_ACTIVITIES } from '@/lib/constants/activities';
+import { sharingGuests, totalGuests, totalRooms } from '@/lib/utils/occupancy';
+
+// Shared "Paid Activities — Rates" rate card (informational; not added to any total).
+// Rendered identically on the Cost Sheet and Proforma Invoice HTML views.
+const paidActivitiesRowsHTML = (): string =>
+  PAID_ACTIVITIES.map(
+    (a) =>
+      `<tr><td>${esc(a.name)}</td><td class="r">₹${a.rate.toLocaleString('en-IN')} ${esc(a.unit)}</td></tr>`
+  ).join('');
 
 // Escape untrusted strings before interpolating into the hand-built HTML below.
 // Payment reference/mode are free-text staff input, so they must be neutralised
@@ -220,17 +230,19 @@ export function buildCostSheetHTML({
   }
 
   const gc = b.guestCount ?? { single: 0, double: 0, triple: 0 };
-  const tg =
-    (Number(gc.single) || 0) + (Number(gc.double) || 0) + (Number(gc.triple) || 0);
+  const sg = sharingGuests(gc); // derived head-count per sharing basis
+  const tg = totalGuests(gc); // total pax (rooms × occupancy)
+  const tr = totalRooms(gc); // total rooms across all bases
 
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Cost Sheet — ${esc(b.companyName || '')}</title><link href="https://fonts.googleapis.com/css2?family=Lora:wght@400;500;600&family=Cormorant+Garamond:wght@500;600;700&display=swap" rel="stylesheet"><style>*{box-sizing:border-box}body{font-family:'Lora',Georgia,serif;font-size:11px;line-height:1.4;color:#1c1917;padding:25px;max-width:800px;margin:0 auto;text-transform:uppercase}.header{text-align:center;padding-bottom:14px;border-bottom:2px solid #d97706;margin-bottom:16px}.header h1{font-family:'Cormorant Garamond',serif;font-weight:600;font-size:28px;letter-spacing:.25em;color:#064e3b;margin:0}.sub{font-size:9px;letter-spacing:.4em;color:#b45309}.header p{font-size:10px;color:#57534e;margin:3px 0 0}h2{font-family:'Cormorant Garamond',serif;font-size:18px;text-align:center;margin:14px 0 4px;color:#064e3b}.event-meta{text-align:center;font-size:11px;color:#57534e;margin-bottom:14px}table.lines{width:100%;border-collapse:collapse;margin-top:8px;border:1px solid #d6d3d1}table.lines th{background:#064e3b;color:#fef3c7;padding:6px 8px;font-size:10px;text-align:left;text-transform:uppercase}table.lines th.r,table.lines td.r{text-align:right}table.lines td{padding:5px 8px;font-size:10px;border-top:1px solid #e7e5e4}tr.day-header td{background:#fef3c7;color:#78350f;font-weight:600;font-size:10px;text-transform:uppercase;padding:6px 8px;border-top:2px solid #d97706}tr.subtotal td{background:#fafaf9;font-weight:500}.grand{background:#064e3b;color:#fef3c7;padding:10px 14px;margin-top:8px;display:flex;justify-content:space-between;align-items:center}.grand .label{font-size:10px;letter-spacing:.15em;text-transform:uppercase}.grand .amount{font-family:'Cormorant Garamond',serif;font-size:22px;font-weight:700}.grand .words{font-size:9px;font-style:italic;color:#fde68a;margin-top:3px}.footer-section{margin-top:16px}.footer-section h3{font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:#064e3b;border-bottom:1px solid #d6d3d1;padding-bottom:3px;margin-bottom:6px}.footer-section p{font-size:10px;margin:4px 0;color:#44403c}.two-col{display:grid;grid-template-columns:1fr 1fr;gap:16px}.meta-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;background:#f5f5f4;padding:8px;margin-bottom:10px;font-size:10px}.meta-grid .lbl{font-weight:500;color:#78716c;font-size:9px;text-transform:uppercase}@media print{body{padding:14px}@page{margin:10mm}}</style></head><body>
 <div class="header"><h1>BAGHAAN</h1><div class="sub">ORCHARD · RETREAT</div><p>Village - Kachrot, Garhmukteshwar, Uttar Pradesh</p><p>Corporate Office: A-20, Sector-35, Noida - 201301 · GST: 09AADCM6620L1Z8</p><p>Telephone: 07599053402, 09410083460</p></div>
 <h2>Corporate / Group Cost Estimation</h2>
 <div class="event-meta"><strong>${esc(b.companyName || '')}</strong>${b.companyAddress ? ' · ' + esc(b.companyAddress) : ''}<br/>Contact: ${esc(b.contactName || '')}${b.contactNumber ? ' · ' + esc(b.contactNumber) : ''}${b.companyGST ? ' · GST: ' + esc(b.companyGST) : ''}</div>
-<div class="meta-grid"><div><div class="lbl">Check In</div>${fmtDate(b.arrival)} · 02:00 PM</div><div><div class="lbl">Check Out</div>${fmtDate(b.departure)} · 11:00 AM</div><div><div class="lbl">Nights</div>${b.nights}</div><div><div class="lbl">Total Guests</div>${tg} pax</div><div><div class="lbl">Single Share</div>${gc.single || 0} guests</div><div><div class="lbl">Double Share</div>${gc.double || 0} guests</div><div><div class="lbl">Triple Share</div>${gc.triple || 0} guests</div><div><div class="lbl">Rooms</div>${b.rooms?.length || 0}</div></div>
+<div class="meta-grid"><div><div class="lbl">Check In</div>${fmtDate(b.arrival)} · 02:00 PM</div><div><div class="lbl">Check Out</div>${fmtDate(b.departure)} · 11:00 AM</div><div><div class="lbl">Nights</div>${b.nights}</div><div><div class="lbl">Total Guests</div>${tg} pax</div><div><div class="lbl">Single Share</div>${gc.single || 0} rooms · ${sg.single} pax</div><div><div class="lbl">Double Share</div>${gc.double || 0} rooms · ${sg.double} pax</div><div><div class="lbl">Triple Share</div>${gc.triple || 0} rooms · ${sg.triple} pax</div><div><div class="lbl">Rooms</div>${tr}</div></div>
 <table class="lines"><thead><tr><th>Particular</th><th class="r">Rate</th><th class="r">No. of Pax</th><th class="r">No. of Rooms</th><th class="r">Total (₹)</th></tr></thead><tbody>${daySections}</tbody></table>
 <div class="grand"><div><div class="label">Grand Total</div><div class="words">${numberToIndianWords(grandTotal)} rupees</div></div><div class="amount">₹${grandTotal.toLocaleString('en-IN')}</div></div>
 <div class="two-col"><div class="footer-section"><h3>Notes</h3><p>${notes.split('\n').map((l) => esc(l.trim())).filter(Boolean).join('<br/>')}</p></div><div class="footer-section"><h3>Activities Included (free)</h3><p>${inclusions.map(esc).join(' · ')}</p></div></div>
+<div class="footer-section"><h3>Paid Activities — Rates (payable on-site)</h3><table class="lines" style="margin-top:4px;"><thead><tr><th>Activity</th><th class="r">Rate</th></tr></thead><tbody>${paidActivitiesRowsHTML()}</tbody></table></div>
 <div class="footer-section"><h3>Terms &amp; Conditions</h3><p>${esc(terms)}</p></div>
 <div class="footer-section" style="margin-top:20px;text-align:right;font-size:9px;color:#a8a29e;">Cost sheet version ${b.costSheet?.version || 1} · Prepared on ${fmtDate(new Date())}</div>
 </body></html>`;
@@ -281,6 +293,8 @@ export function buildPIHTML(
 <tbody>${rows}<tr class="total-row"><td colspan="3">GRAND TOTAL</td><td class="r">₹${Number(pi.grandTotal).toLocaleString('en-IN')}</td></tr><tr class="words-row"><td colspan="4">Rupees ${numberToIndianWords(pi.grandTotal)}</td></tr></tbody></table>
 <div class="payment-box"><h3>Payment Terms</h3><table><tr><td>Advance Required (50%)</td><td class="r">₹${Number(pi.advanceRequired).toLocaleString('en-IN')}</td></tr><tr><td>Balance (before checkout)</td><td class="r">₹${balance.toLocaleString('en-IN')}</td></tr></table><p style="margin:5px 0 0;">${esc(pi.paymentTerms || '50% advance to confirm booking. Balance to be paid before checkout.')}</p></div>
 <div class="bank-box"><h3>Bank Details</h3><table><tr><td>Payable to</td><td style="font-weight:500;">${entity.payeeName}</td></tr><tr><td>Bank</td><td>${entity.bank.name}</td></tr><tr><td>Branch</td><td>${entity.bank.branch}</td></tr><tr><td>Account Type</td><td>${entity.bank.accountType}</td></tr><tr><td>Account No.</td><td style="font-family:monospace;">${entity.bank.accountNo}</td></tr><tr><td>IFSC</td><td style="font-family:monospace;">${entity.bank.ifsc}</td></tr></table></div>
+<div class="bank-box"><h3>Activities Included (free)</h3><p style="margin:0;">${INCLUDED_ACTIVITIES.map(esc).join(' · ')}</p></div>
+<div class="bank-box"><h3>Paid Activities — Rates (payable on-site)</h3><table class="lines" style="margin:4px 0 0;"><thead><tr><th>Activity</th><th class="r">Rate</th></tr></thead><tbody>${paidActivitiesRowsHTML()}</tbody></table></div>
 <div class="terms"><p>1. Resort not liable for any damages due to circumstances beyond its control.</p><p>2. All disputes are subject to jurisdiction of Delhi.</p><p>3. Payment to be made in favour of '${entity.payeeName}'.</p></div>
 <div class="signature"><div>Generated by: ${esc(pi.generatedBy)} · ${fmtDate(pi.generatedAt)}</div><div class="sig-line">For ${entity.payeeName}</div><div style="font-style:italic;margin-top:3px;">Authorized Signatory</div></div>
 <div class="footnote">**** Electronic Invoice does not require Signature ****</div>

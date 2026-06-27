@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import { createCorporateBooking } from '@/lib/actions/corporate';
 import { updateBooking } from '@/lib/actions/bookings';
 import { isoDate, daysBetween, todayISO, addDays } from '@/lib/utils/date';
+import { totalGuests, totalRooms } from '@/lib/utils/occupancy';
 import { isValidPhone, PHONE_ERROR } from '@/lib/validations/phone';
 import { DateInput } from '@/components/ui/DateInput';
 import { NumberInput } from '@/components/ui/NumberInput';
@@ -115,11 +116,15 @@ export function CorporateBookingModal({ booking, users, currentUser, onClose }: 
           </div>
           <div className="grid grid-cols-3 gap-4">
             {(['single', 'double', 'triple'] as const).map(type => (
-              <div key={type}><label className="text-xs text-stone-600 uppercase tracking-wider block mb-1">{type === 'single' ? 'Single Share' : type === 'double' ? 'Double Share' : 'Triple Share'} guests</label>
+              <div key={type}><label className="text-xs text-stone-600 uppercase tracking-wider block mb-1">{type === 'single' ? 'Single Share' : type === 'double' ? 'Double Share' : 'Triple Share'} rooms</label>
                 <NumberInput value={form.guestCount[type]} min={0} onChange={n => setForm(f => ({ ...f, guestCount: { ...f.guestCount, [type]: n } }))} className="w-full px-3 py-2 border border-stone-300 text-sm outline-none bg-white" /></div>
             ))}
           </div>
-          <p className="text-xs text-stone-500 italic">Room-level detail is captured in the cost sheet — no need to pick rooms here.</p>
+          <p className="text-xs text-stone-500 italic">
+            Enter the number of <strong>rooms</strong> on each sharing basis. That works out to{' '}
+            <span className="text-emerald-800 font-medium not-italic">{totalRooms(form.guestCount)} rooms · {totalGuests(form.guestCount)} guests</span>{' '}
+            (single 1, double 2, triple 3 per room). Specific room numbers are picked in the cost sheet.
+          </p>
           <div><label className="text-xs text-stone-600 uppercase tracking-wider block mb-1">Remarks</label><textarea value={form.remarks} onChange={e => setForm(f => ({ ...f, remarks: e.target.value }))} rows={2} className="w-full px-3 py-2 border border-stone-300 text-sm outline-none bg-white" /></div>
           <div className="border border-stone-200 bg-white p-3">
             <AddOnsEditor value={form.addOns} onChange={v => setForm(f => ({ ...f, addOns: v }))} />

@@ -495,3 +495,130 @@ generation (5).
 
 **Verification:** `npx tsc --noEmit` clean (exit 0); only the pre-existing `pStats` useMemo-dep warning.
 No new migration. Not run against live Supabase.
+
+## Task 13 — `npm run dev` reliably claims port 3000 (auto-clear orphans)
+
+**Problem:** On Windows, `Ctrl+C` sometimes leaves the Next dev process alive. Next.js 16
+enforces one `next dev` per project dir, so the next `npm run dev` exited with code 1
+(`⨯ Another next dev server is already running.`) — looked like a broken dev script.
+
+**Fix:** Added a `predev` npm script (runs automatically before `dev`) that force-kills any
+process listening on port 3000, then `next dev` starts clean.
+
+- `package.json`
+  - New `predev`: `powershell -NoProfile -ExecutionPolicy Bypass -Command "try { Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction Stop | ForEach-Object { taskkill /PID $_.OwningProcess /F } } catch {}; exit 0"`
+  - Always exits 0 (so a free port never blocks `dev`).
+
+**Verification:** Started an orphan server on 3000, ran `npm run dev` → predev terminated the
+orphan (PID logged), `next dev` reported `✓ Ready` on :3000, `GET /login 200`. Also confirmed
+`predev` is a clean no-op (exit 0) when 3000 is already free. Windows-only command (matches the
+dev environment).
+
+## Task 14 — Activities on Cost Sheet & Proforma Invoice (corporate)
+
+Added the resort's activity lists to the corporate **Cost Sheet** and **Proforma Invoice**,
+in both render targets (HTML print + true PDF).
+
+- `src/lib/constants/activities.ts` *(new)* — single source of truth:
+  - `INCLUDED_ACTIVITIES` (8 free: Swimming Pool [costumes mandatory], Volleyball, Badminton,
+    Table Tennis, Bullock Cart Ride, Pottery Session, Tug of War, Cricket).
+  - `PAID_ACTIVITIES` (8 chargeable with rate + unit: Pool Table ₹200/45min, Zip Line ₹600,
+    Wall Climbing ₹400, Cycling ₹350/45min, Rappelling ₹400, Air Hockey ₹200/game,
+    Target Shooting ₹300/20 balls, Paintball ₹800/40 balls).
+- **Cost Sheet:** free list already rendered via the editable "Activities Included (free)"
+  section — default now seeds from `INCLUDED_ACTIVITIES` (`CostSheetModal.tsx`). Added a new
+  **"Paid Activities — Rates"** rate card.
+  - `src/lib/utils/print.ts` → `buildCostSheetHTML` (HTML)
+  - `src/lib/pdf/CostSheetPdf.tsx` (PDF)
+- **Proforma Invoice:** had no activities section — added both **free list** and **paid rate card**.
+  - `src/lib/utils/print.ts` → `buildPIHTML` (HTML)
+  - `src/lib/pdf/ProformaInvoicePdf.tsx` (PDF)
+
+**Design:** paid activities are an informational rate card (payable on-site) — **not** added to
+any grand total. Free list on the Cost Sheet stays per-booking editable (existing behaviour);
+on the PI it's the fixed resort list.
+
+**Verification:** `npx tsc --noEmit` clean (exit 0). Not yet visually rendered against a live
+corporate booking.
+
+## Task 15 — Corporate list: newest entry on top
+
+**Bug:** A newly entered corporate company didn't appear at the top of the corporate
+list — it dropped to wherever its check-in date fell.
+
+**Root cause:** `CorporateClient.tsx` sorted the `filtered` list by **arrival (check-in) date**
+descending, not by when the entry was created. Affected both the table list and Kanban views
+(both read the same sorted array).
+
+**Fix:** Sort by `createdAt` (ISO timestamp) descending instead, so the most recently
+created entry is always first.
+
+- `src/app/(app)/corporate/CorporateClient.tsx`
+  - `.sort((a, b) => (b.arrival ?? '')…)` → `.sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''))`
+
+**Verification:** `npx tsc --noEmit` clean (exit 0). Behaviour change confirmed by logic
+(createdAt desc = newest first); not yet visually checked against live data.
+
+## Task 16 — Cost Sheet free-activities list now fixed (matches PI)
+
+Follow-up to Task 14. The Cost Sheet's "Activities Included (free)" section previously
+rendered the per-booking saved `inclusions` (so older cost sheets showed an outdated list).
+Switched both Cost Sheet routes to always feed the fixed resort list, so the free list is
+identical on the Cost Sheet and Proforma Invoice everywhere.
+
+- `src/app/api/print/cost-sheet/route.ts` — pass `INCLUDED_ACTIVITIES` (not `booking.costSheet.inclusions`).
+- `src/app/api/pdf/cost-sheet/route.tsx` — same.
+
+**Verification:** `npx tsc --noEmit` clean; `npm test` 19/19 pass (incl. both activity render tests).
+
+## Task 17 — Corporate occupancy: count rooms (not heads), fix per-person line totals
+
+A printed cost sheet (Horiba India) revealed two linked bugs. Staff enter sharing
+occupancy as **rooms** (3 single, 14 double), but the app stored/displayed those numbers
+as **guests**, so "Double Share" showed 14 (should be 28), "Total Guests" showed 17
+(should be 31), and "Rooms" showed 0 (it read assigned room numbers, none on an estimate).
+Separately, per-person accommodation line items totalled `rate × pax-per-room`, billing
+only one room.
+
+**Decision:** `guestCount` now means *rooms per sharing basis* (no DB migration — the
+`guest_count` column is reinterpreted, not renamed). Guests are derived: single ×1,
+double ×2, triple ×3.
+
+- `src/lib/utils/occupancy.ts` *(new)* — `sharingGuests` / `totalGuests` / `totalRooms`
+  helpers, the single source of truth for the rooms→pax derivation. `+ occupancy.test.ts`.
+- `src/lib/types/booking.ts` — document `GuestCount` as room counts.
+- `src/components/corporate/CorporateBookingModal.tsx` — relabel inputs "… Share **rooms**";
+  live hint shows derived "X rooms · Y guests".
+- `src/lib/utils/print.ts` & `src/lib/pdf/CostSheetPdf.tsx` — cost-sheet meta grid: each
+  share cell shows "N rooms · M pax", Total Guests is derived, Rooms = total sharing rooms.
+- `src/app/(app)/corporate/[id]/CorporateDetailClient.tsx` — Total Guests / Occupancy stats
+  use the derived figures.
+- `src/lib/actions/corporate.ts` — booking `adults` derived via `totalGuests`, not the raw sum.
+- `src/components/corporate/CostSheetModal.tsx` — adding a catalogue item now pre-fills
+  No. of Pax (qty) and No. of Rooms (units) from occupancy: per-share rows bill the guests on
+  that basis (e.g. double → 28 pax / 14 rooms), other per-guest items bill everyone. Line
+  total stays `rate × qty`, so the per-person rows now total correctly with no formula change
+  (safe for existing saved sheets). The PI shows no occupancy block, so it was untouched.
+
+**Verification:** `npm test` 24/24 pass (5 new occupancy tests + cost-sheet meta assertions);
+`npm run build` clean (full typecheck). For the Horiba sheet (3 single + 14 double rooms):
+Total Guests 31, Rooms 17, Double Share "14 rooms · 28 pax".
+
+## Task 18 — Activities now show on-screen for both Cost Sheet and PI
+
+Follow-up to Tasks 14/16. The activities sections were added to the printed/PDF documents
+(`buildPIHTML`, `ProformaInvoicePdf`, `buildCostSheetHTML`, `CostSheetPdf`) but **not** to
+the in-app modals, which render their own JSX. So users reviewing on screen couldn't see
+the activities — they only appeared after PRINT / SAVE PDF. Added both sections to the two
+on-screen views to match the printed documents.
+
+- `src/components/corporate/ProformaInvoicePreview.tsx` — render "Activities Included (free)"
+  and "Paid Activities — Rates (payable on-site)" after the Bank Details box (covers the draft
+  preview and the generated PI view).
+- `src/components/corporate/CostSheetModal.tsx` — same two blocks after the Notes/Terms row.
+
+Both pull from the shared `src/lib/constants/activities.ts` constants, so the on-screen and
+printed/PDF Cost Sheet and PI stay in sync.
+
+**Verification:** `npm run build` clean. The on-screen Cost Sheet and PI now show the same
+activity blocks as their printed/PDF versions.

@@ -106,7 +106,7 @@ export function CorporateClient({ initialBookings, initialPayments, users, lastA
         if (!`${b.companyName} ${b.contactName} ${b.contactNumber} ${b.confirmationNumber} ${b.proformaInvoice?.piNumber ?? ''}`.toLowerCase().includes(q)) return false;
       }
       return true;
-    }).sort((a, b) => (b.arrival ?? '').localeCompare(a.arrival ?? ''));
+    }).sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''));
   }, [bookings, search, filterStage, filterCompany, arrivalFrom, arrivalTo, minRevenue]);
 
   const summary = useMemo(() => {

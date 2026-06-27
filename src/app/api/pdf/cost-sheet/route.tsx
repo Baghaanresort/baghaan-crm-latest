@@ -3,6 +3,7 @@ import { renderToBuffer } from '@react-pdf/renderer';
 import { createClient } from '@/lib/supabase/server';
 import { dbToBooking } from '@/lib/mappers/booking';
 import { CostSheetPdf } from '@/lib/pdf/CostSheetPdf';
+import { INCLUDED_ACTIVITIES } from '@/lib/constants/activities';
 
 export const runtime = 'nodejs';
 
@@ -35,7 +36,7 @@ export async function GET(request: NextRequest) {
         grandTotal={booking.costSheet?.grandTotal ?? 0}
         byDay={byDay}
         notes={booking.costSheet?.notes ?? ''}
-        inclusions={booking.costSheet?.inclusions ?? []}
+        inclusions={INCLUDED_ACTIVITIES}
         terms={booking.costSheet?.terms ?? ''}
       />,
     );

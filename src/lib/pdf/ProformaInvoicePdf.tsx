@@ -5,6 +5,7 @@ import { fmtDate, datesInRange } from '@/lib/utils/date';
 import { numberToIndianWords } from '@/lib/utils/currency';
 import { registerPdfFonts } from './registerFonts';
 import { styles, colors } from './theme';
+import { INCLUDED_ACTIVITIES, PAID_ACTIVITIES } from '@/lib/constants/activities';
 
 registerPdfFonts();
 
@@ -152,6 +153,23 @@ export function ProformaInvoicePdf({ booking: b, pi, entity }: ProformaInvoicePd
           <BankRow label="Account Type" value={entity.bank.accountType} />
           <BankRow label="Account No." value={entity.bank.accountNo} mono />
           <BankRow label="IFSC" value={entity.bank.ifsc} mono />
+        </View>
+
+        {/* Activities included (free) */}
+        <View style={{ backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.border, padding: 8, marginTop: 8 }} wrap={false}>
+          <Text style={{ fontSize: 8, textTransform: 'uppercase', color: colors.emerald, marginBottom: 4 }}>Activities Included (free)</Text>
+          <Text style={{ fontSize: 8.5, color: colors.muted }}>{INCLUDED_ACTIVITIES.join(' · ')}</Text>
+        </View>
+
+        {/* Paid activities rate card (informational — not added to the total) */}
+        <View style={{ backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.border, padding: 8, marginTop: 8 }} wrap={false}>
+          <Text style={{ fontSize: 8, textTransform: 'uppercase', color: colors.emerald, marginBottom: 4 }}>Paid Activities — Rates (payable on-site)</Text>
+          {PAID_ACTIVITIES.map((a, i) => (
+            <View key={i} style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 1 }}>
+              <Text style={{ fontSize: 8.5, color: colors.muted }}>{a.name}</Text>
+              <Text style={{ fontSize: 8.5, color: colors.muted }}>{inr(a.rate)} · {a.unit}</Text>
+            </View>
+          ))}
         </View>
 
         {/* Terms */}

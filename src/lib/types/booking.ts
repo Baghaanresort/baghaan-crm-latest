@@ -13,6 +13,10 @@ export type CorporateStage =
   | 'lost'; // display-only: a lost/declined corporate deal (stored as status='cancelled')
 export type EffectiveStatus = 'confirmed' | 'hold' | 'pending_verification';
 
+// Occupancy on each sharing basis, expressed as the NUMBER OF ROOMS (not guests).
+// Guests are derived: single rooms hold 1 pax, double 2, triple 3 — see
+// `src/lib/utils/occupancy.ts`. The DB column is still named `guest_count` for
+// backwards compatibility; only the interpretation changed (rooms, not heads).
 export interface GuestCount {
   single: number;
   double: number;

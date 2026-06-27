@@ -5,6 +5,8 @@ import { X, Plus, Trash2, Printer } from 'lucide-react';
 import { toast } from 'sonner';
 import { updateCostSheet, sendCostSheet, markCostSheetAccepted } from '@/lib/actions/corporate';
 import { LINE_ITEM_CATALOGUE } from '@/lib/constants/catalogue';
+import { INCLUDED_ACTIVITIES, PAID_ACTIVITIES } from '@/lib/constants/activities';
+import { sharingGuests, totalGuests } from '@/lib/utils/occupancy';
 import { datesInRange, fmtDate, isoDate } from '@/lib/utils/date';
 import { NumberInput } from '@/components/ui/NumberInput';
 import type { Booking, LineItem } from '@/lib/types/booking';
@@ -29,9 +31,7 @@ export function CostSheetModal({ booking, currentUser, onClose }: Props) {
     (booking.costSheet?.lineItems ?? []).map(li => ({ ...li, _id: `${Math.random()}`, total: li.rate * li.qty }))
   );
   const [notes, setNotes] = useState(booking.costSheet?.notes ?? '');
-  const [inclusions, setInclusions] = useState<string[]>(booking.costSheet?.inclusions ?? [
-    'Welcome drink on arrival', 'Daily breakfast', 'Evening bonfire', 'Swimming pool access', 'Nature walk',
-  ]);
+  const [inclusions, setInclusions] = useState<string[]>(booking.costSheet?.inclusions ?? [...INCLUDED_ACTIVITIES]);
   const [terms, setTerms] = useState(booking.costSheet?.terms ?? 'GST as applicable. 50% advance required to confirm booking. No refund for no-show or last minute cancellation.');
   const [showCatalogue, setShowCatalogue] = useState<string | null>(null);
 
@@ -59,8 +59,29 @@ export function CostSheetModal({ booking, currentUser, onClose }: Props) {
     setItems(prev => [...prev, { _id: `${Date.now()}`, day, dayLabel, particular: '', rate: 0, qty: 1, units: 1, total: 0, category: 'Custom' }]);
   };
 
+  // Pre-fill No. of Pax (qty) and No. of Rooms (units) from the booking's
+  // occupancy so per-person rows total correctly. guestCount holds room counts;
+  // pax = rooms × occupancy. Per-share accommodation rows bill the guests on that
+  // basis; other per-guest items (food) bill everyone. Falls back to 1 when
+  // occupancy hasn't been entered yet, leaving the row editable.
+  const quantitiesFor = (item: { name: string; unit: string }): { qty: number; units: number } => {
+    const gc = booking.guestCount ?? { single: 0, double: 0, triple: 0 };
+    const sg = sharingGuests(gc);
+    const name = item.name.toLowerCase();
+    let qty = 1;
+    let units = 1;
+    if (item.unit === 'guest') {
+      if (name.includes('single share')) { qty = sg.single; units = gc.single; }
+      else if (name.includes('double share')) { qty = sg.double; units = gc.double; }
+      else if (name.includes('triple share')) { qty = sg.triple; units = gc.triple; }
+      else { qty = totalGuests(gc); units = 1; }
+    }
+    return { qty: qty || 1, units: units || 1 };
+  };
+
   const addFromCatalogue = (day: string, dayLabel: string, item: { name: string; defaultRate: number; unit: string }, category: string) => {
-    setItems(prev => [...prev, { _id: `${Date.now()}`, day, dayLabel, particular: item.name, rate: item.defaultRate, qty: 1, units: 1, total: item.defaultRate, category }]);
+    const { qty, units } = quantitiesFor(item);
+    setItems(prev => [...prev, { _id: `${Date.now()}`, day, dayLabel, particular: item.name, rate: item.defaultRate, qty, units, total: item.defaultRate * qty, category }]);
     setShowCatalogue(null);
   };
 
@@ -215,6 +236,23 @@ export function CostSheetModal({ booking, currentUser, onClose }: Props) {
           <div className="grid grid-cols-2 gap-4">
             <div><label className="text-xs text-stone-600 uppercase tracking-wider block mb-1">Notes</label><textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3} className="w-full px-3 py-2 border border-stone-300 text-sm outline-none bg-white" /></div>
             <div><label className="text-xs text-stone-600 uppercase tracking-wider block mb-1">Terms</label><textarea value={terms} onChange={e => setTerms(e.target.value)} rows={3} className="w-full px-3 py-2 border border-stone-300 text-sm outline-none bg-white" /></div>
+          </div>
+
+          {/* Activities (informational — appears on the printed cost sheet & PI) */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="bg-white border border-stone-200 p-3 text-xs">
+              <div className="font-medium text-emerald-900 uppercase tracking-wider mb-2">Activities Included (free)</div>
+              <div className="text-stone-600">{INCLUDED_ACTIVITIES.join(' · ')}</div>
+            </div>
+            <div className="bg-white border border-stone-200 p-3 text-xs">
+              <div className="font-medium text-emerald-900 uppercase tracking-wider mb-2">Paid Activities — Rates (payable on-site)</div>
+              {PAID_ACTIVITIES.map(a => (
+                <div key={a.name} className="flex justify-between py-0.5">
+                  <span className="text-stone-600">{a.name}</span>
+                  <span className="text-stone-600">₹{a.rate.toLocaleString('en-IN')} · {a.unit}</span>
+                </div>
+              ))}
+            </div>
           </div>
 
           {/* Footer */}

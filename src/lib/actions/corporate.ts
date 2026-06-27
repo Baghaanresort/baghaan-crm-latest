@@ -6,6 +6,7 @@ import { ok, err, type ActionResult } from '@/lib/types/result';
 import { logCorporateActivity } from '@/lib/server/corporateEngine';
 import { CORPORATE_STAGES, corporateStageStep } from '@/lib/constants/corporate';
 import { isValidPhone, normalizePhone, PHONE_ERROR } from '@/lib/validations/phone';
+import { totalGuests } from '@/lib/utils/occupancy';
 import type { AddOn, RoomCharge, CostSheet, LineItem, ProformaInvoice, CorporateStage } from '@/lib/types/booking';
 import type { CorporateActivityEntry } from '@/lib/types/corporate-activity';
 
@@ -291,7 +292,7 @@ export async function createCorporateBooking(input: {
     arrival: input.arrival,
     departure: input.departure,
     nights: input.nights,
-    adults: (input.guestCount.single + input.guestCount.double + input.guestCount.triple) || 1,
+    adults: totalGuests(input.guestCount) || 1,
     children: 0,
     rooms: input.rooms,
     rate_breakdown: '',

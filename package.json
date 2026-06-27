@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "predev": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"try { Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction Stop | ForEach-Object { taskkill /PID $_.OwningProcess /F } } catch {}; exit 0\"",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",

@@ -4,6 +4,7 @@ import { Fragment } from 'react';
 import { X, Printer } from 'lucide-react';
 import { fmtDate, datesInRange } from '@/lib/utils/date';
 import { BILLING_ENTITIES } from '@/lib/constants/billing';
+import { INCLUDED_ACTIVITIES, PAID_ACTIVITIES } from '@/lib/constants/activities';
 import type { Booking, ProformaInvoice } from '@/lib/types/booking';
 
 interface Props {
@@ -137,6 +138,21 @@ export function ProformaInvoicePreview({ booking, onClose, draft = false, onConf
             <div><span className="text-stone-500">Payable to:</span> <span className="font-medium">{entity.payeeName}</span></div>
             <div><span className="text-stone-500">Bank:</span> {entity.bank.name} · <span className="text-stone-500">Branch:</span> {entity.bank.branch}</div>
             <div><span className="text-stone-500">Account No.:</span> <span className="font-mono">{entity.bank.accountNo}</span> · <span className="text-stone-500">IFSC:</span> <span className="font-mono">{entity.bank.ifsc}</span></div>
+          </div>
+          {/* Activities included (free) — matches the printed/PDF PI */}
+          <div className="bg-stone-50 border border-stone-200 p-4 mt-3 text-xs">
+            <div className="font-medium text-emerald-900 uppercase tracking-wider mb-2">Activities Included (free)</div>
+            <div className="text-stone-600">{INCLUDED_ACTIVITIES.join(' · ')}</div>
+          </div>
+          {/* Paid activities rate card (informational — not added to the total) */}
+          <div className="bg-stone-50 border border-stone-200 p-4 mt-3 text-xs">
+            <div className="font-medium text-emerald-900 uppercase tracking-wider mb-2">Paid Activities — Rates (payable on-site)</div>
+            {PAID_ACTIVITIES.map(a => (
+              <div key={a.name} className="flex justify-between py-0.5">
+                <span className="text-stone-600">{a.name}</span>
+                <span className="text-stone-600">₹{a.rate.toLocaleString('en-IN')} · {a.unit}</span>
+              </div>
+            ))}
           </div>
         </div>
       </div>

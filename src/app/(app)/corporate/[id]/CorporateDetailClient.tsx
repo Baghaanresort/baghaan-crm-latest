@@ -15,6 +15,7 @@ import {
 import { sendCorporateAdvanceRequest } from '@/lib/actions/transactions';
 import { CORPORATE_STAGES, CORPORATE_STAGE_ORDER, corporateStageStep } from '@/lib/constants/corporate';
 import { getBookingPaymentStatus } from '@/lib/utils/booking';
+import { totalGuests as occTotalGuests, totalRooms } from '@/lib/utils/occupancy';
 import { fmtDate, fmtDateTime } from '@/lib/utils/date';
 import type { Booking, CorporateStage } from '@/lib/types/booking';
 import type { Payment } from '@/lib/types/payment';
@@ -65,7 +66,8 @@ export function CorporateDetailClient({ booking, payments, users, currentUser }:
   const stage = (booking.corporateStage ?? 'inquiry') as CorporateStage;
   const ps = useMemo(() => getBookingPaymentStatus(booking, payments), [booking, payments]);
   const gc = booking.guestCount ?? { single: 0, double: 0, triple: 0 };
-  const totalGuests = gc.single + gc.double + gc.triple || booking.adults;
+  const totalPax = occTotalGuests(gc) || booking.adults; // rooms × occupancy
+  const totalRoomCount = totalRooms(gc);
 
   useEffect(() => {
     let on = true;
@@ -184,8 +186,8 @@ export function CorporateDetailClient({ booking, payments, users, currentUser }:
               <Stat label="Departure" value={fmtDate(booking.departure)} />
               <Stat label="Nights" value={String(booking.nights)} />
               <Stat label="Rooms" value={booking.rooms?.length ? `${booking.rooms.length} (${booking.rooms.join(', ')})` : '—'} />
-              <Stat label="Total Guests" value={String(totalGuests)} />
-              <Stat label="Occupancy" value={`${gc.single} single · ${gc.double} double · ${gc.triple} triple`} />
+              <Stat label="Total Guests" value={String(totalPax)} />
+              <Stat label="Occupancy" value={`${gc.single} single · ${gc.double} double · ${gc.triple} triple — ${totalRoomCount} rooms`} />
             </Grid>
             {booking.remarks && <div className="mt-3 text-sm text-stone-600 bg-stone-50 border border-stone-200 p-3"><Users size={12} className="inline mr-1" /> {booking.remarks}</div>}
           </Card>

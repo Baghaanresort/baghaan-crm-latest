@@ -4,6 +4,8 @@ import { fmtDate, datesInRange } from '@/lib/utils/date';
 import { numberToIndianWords } from '@/lib/utils/currency';
 import { registerPdfFonts } from './registerFonts';
 import { styles, colors } from './theme';
+import { PAID_ACTIVITIES } from '@/lib/constants/activities';
+import { sharingGuests, totalGuests, totalRooms } from '@/lib/utils/occupancy';
 
 registerPdfFonts();
 
@@ -60,7 +62,9 @@ export function CostSheetPdf({ booking: b, items, grandTotal, byDay, notes, incl
   });
 
   const gc = b.guestCount ?? { single: 0, double: 0, triple: 0 };
-  const totalGuests = (gc.single || 0) + (gc.double || 0) + (gc.triple || 0);
+  const sg = sharingGuests(gc); // derived head-count per sharing basis
+  const totalPax = totalGuests(gc); // total pax (rooms × occupancy)
+  const totalRoomCount = totalRooms(gc); // total rooms across all bases
   const multi = itemsByDay['multi'] ?? [];
 
   return (
@@ -87,11 +91,11 @@ export function CostSheetPdf({ booking: b, items, grandTotal, byDay, notes, incl
           <MetaCell label="Check In" value={`${fmtDate(b.arrival)} · 02:00 PM`} />
           <MetaCell label="Check Out" value={`${fmtDate(b.departure)} · 11:00 AM`} />
           <MetaCell label="Nights" value={String(b.nights)} />
-          <MetaCell label="Total Guests" value={`${totalGuests} pax`} />
-          <MetaCell label="Single Share" value={`${gc.single || 0} guests`} />
-          <MetaCell label="Double Share" value={`${gc.double || 0} guests`} />
-          <MetaCell label="Triple Share" value={`${gc.triple || 0} guests`} />
-          <MetaCell label="Rooms" value={String(b.rooms?.length || 0)} />
+          <MetaCell label="Total Guests" value={`${totalPax} pax`} />
+          <MetaCell label="Single Share" value={`${gc.single || 0} rooms · ${sg.single} pax`} />
+          <MetaCell label="Double Share" value={`${gc.double || 0} rooms · ${sg.double} pax`} />
+          <MetaCell label="Triple Share" value={`${gc.triple || 0} rooms · ${sg.triple} pax`} />
+          <MetaCell label="Rooms" value={String(totalRoomCount)} />
         </View>
 
         {/* Line items */}
@@ -156,6 +160,17 @@ export function CostSheetPdf({ booking: b, items, grandTotal, byDay, notes, incl
             <Text style={styles.sectionTitle}>Activities Included (free)</Text>
             <Text style={styles.sectionBody}>{inclusions.join(' · ')}</Text>
           </View>
+        </View>
+
+        {/* Paid activities rate card (informational — not added to the total) */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Paid Activities — Rates (payable on-site)</Text>
+          {PAID_ACTIVITIES.map((a, i) => (
+            <View key={i} style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 1 }} wrap={false}>
+              <Text style={{ fontSize: 8.5, color: colors.muted }}>{a.name}</Text>
+              <Text style={{ fontSize: 8.5, color: colors.muted }}>{inr(a.rate)} · {a.unit}</Text>
+            </View>
+          ))}
         </View>
 
         {/* Terms */}

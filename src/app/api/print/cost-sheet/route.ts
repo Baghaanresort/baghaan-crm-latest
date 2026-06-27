@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { dbToBooking } from '@/lib/mappers/booking';
 import { buildCostSheetHTML } from '@/lib/utils/print';
+import { INCLUDED_ACTIVITIES } from '@/lib/constants/activities';
 
 export async function GET(request: NextRequest) {
   const bookingId = request.nextUrl.searchParams.get('bookingId');
@@ -28,7 +29,7 @@ export async function GET(request: NextRequest) {
     grandTotal: booking.costSheet?.grandTotal ?? 0,
     byDay,
     notes: booking.costSheet?.notes ?? '',
-    inclusions: booking.costSheet?.inclusions ?? [],
+    inclusions: INCLUDED_ACTIVITIES, // always the fixed resort list (matches the PI)
     terms: booking.costSheet?.terms ?? '',
   });
 
