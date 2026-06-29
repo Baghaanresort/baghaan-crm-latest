@@ -1,4 +1,6 @@
-import { Document, Page, View, Text } from '@react-pdf/renderer';
+import fs from 'node:fs';
+import path from 'node:path';
+import { Document, Page, View, Text, Image } from '@react-pdf/renderer';
 import type { Booking, LineItem } from '@/lib/types/booking';
 import { fmtDate, datesInRange } from '@/lib/utils/date';
 import { numberToIndianWords } from '@/lib/utils/currency';
@@ -8,6 +10,14 @@ import { PAID_ACTIVITIES } from '@/lib/constants/activities';
 import { sharingGuests, totalGuests, totalRooms } from '@/lib/utils/occupancy';
 
 registerPdfFonts();
+
+// Brand logo (public/Brown.png), traced into this route via next.config's
+// outputFileTracingIncludes so it resolves in serverless deployments too.
+// Read into a Buffer (lazily, once) and handed straight to <Image>: passing an
+// absolute path *string* breaks on Windows, where @react-pdf's url.parse reads
+// the "C:" drive letter as a URL protocol and tries to fetch it as a remote URL.
+let logoData: Buffer | undefined;
+const logoSrc = () => (logoData ??= fs.readFileSync(path.join(process.cwd(), 'public', 'Brown.png')));
 
 const inr = (n: number) => `₹${Math.round(Number(n) || 0).toLocaleString('en-IN')}`;
 const num = (n: number) => (Number(n) || 0).toLocaleString('en-IN');
@@ -72,8 +82,7 @@ export function CostSheetPdf({ booking: b, items, grandTotal, byDay, notes, incl
       <Page size="A4" style={styles.page}>
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.brand}>BAGHAAN</Text>
-          <Text style={styles.brandSub}>ORCHARD · RETREAT</Text>
+          <Image style={styles.logo} src={logoSrc()} />
           <Text style={styles.brandLine}>Village - Kachrot, Garhmukteshwar, Uttar Pradesh</Text>
           <Text style={styles.brandLine}>Corporate Office: A-20, Sector-35, Noida - 201301 · GST: 09AADCM6620L1Z8</Text>
           <Text style={styles.brandLine}>Telephone: 07599053402, 09410083460</Text>

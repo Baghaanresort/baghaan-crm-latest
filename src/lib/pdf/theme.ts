@@ -49,6 +49,9 @@ export const styles = StyleSheet.create({
   },
   brandSub: { fontSize: 7, letterSpacing: 4, lineHeight: 1.4, color: colors.amberText, marginTop: 2 },
   brandLine: { fontSize: 8, color: colors.muted, marginTop: 2 },
+  // Brand logo (Brown.png — the BAGHAAN / ORCHARD·RETREAT wordmark). Width-only
+  // so @react-pdf keeps the source aspect ratio; centred in the header column.
+  logo: { width: 165, alignSelf: 'center', marginBottom: 6 },
 
   docTitle: {
     fontFamily: 'Cormorant Garamond',

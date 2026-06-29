@@ -16,6 +16,9 @@ export const VOUCHER_BUCKET = 'baghaan-crm-voucher';
 // The guest-facing URL stays /api/pdf/voucher?bookingId=… regardless of the key.
 function fingerprint(b: Booking, payments: Payment[]): string {
   const material = JSON.stringify({
+    // Template version — bump when the voucher layout changes so already-cached
+    // PDFs are superseded even when the booking data is unchanged. v2: brand logo.
+    v: 2,
     s: b.status, a: b.arrival, d: b.departure, n: b.nights, ad: b.adults, ch: b.children,
     r: b.rooms, t: b.totalAmount, ap: b.advancePaid, rb: b.rateBreakdown, inc: b.inclusions,
     g: b.guestName, c: b.contactNumber, e: b.email, co: b.companyName, gst: b.gstNumber,

@@ -622,3 +622,68 @@ printed/PDF Cost Sheet and PI stay in sync.
 
 **Verification:** `npm run build` clean. The on-screen Cost Sheet and PI now show the same
 activity blocks as their printed/PDF versions.
+
+## Task 19 — Brand logo on Cost Sheet & Proforma Invoice
+
+Added the Baghaan logo image (`public/Brown.png` — the BAGHAAN / ORCHARD·RETREAT wordmark)
+to the headers of the **Cost Sheet** and **Proforma Invoice**, in both their HTML print
+views and their downloadable PDFs. Because the logo artwork already contains the brand name,
+it **replaces** the typed `BAGHAAN` title + `ORCHARD · RETREAT` subtitle (avoiding showing
+the name twice); the address / GST / phone lines remain below it.
+
+- `src/lib/utils/print.ts` — `buildCostSheetHTML` & `buildPIHTML`: swapped the `<h1>`/`.sub`
+  text for `<img class="logo" src="/Brown.png">` and added a `.header .logo` CSS rule
+  (height-capped, centred). Served at origin root from `public/`.
+- `src/lib/pdf/CostSheetPdf.tsx` & `src/lib/pdf/ProformaInvoicePdf.tsx` — render the logo via
+  `@react-pdf`'s `<Image>`, reading `public/Brown.png` from disk (`path.join(process.cwd(),
+  'public', 'Brown.png')`, mirroring how the bundled fonts are loaded).
+- `src/lib/pdf/theme.ts` — new `logo` style (width-only so the aspect ratio is preserved,
+  centred in the header column). The unused `brand`/`brandSub` styles stay for the Voucher PDF.
+- `next.config.ts` — added `./public/Brown.png` to `outputFileTracingIncludes` for
+  `/api/pdf/cost-sheet` and `/api/pdf/pi` so the file is traced into serverless deployments.
+
+Scope per request: Cost Sheet + PI only. The Voucher and other documents are unchanged.
+
+**Verification:** `npm run build` clean.
+
+## Task 20 — Fix: logo missing from Cost Sheet & PI PDFs on Windows
+
+The logo from Task 19 didn't appear in the **downloaded PDFs** when running locally on
+Windows. Root cause: the PDF components passed an absolute path *string*
+(`C:\…\public\Brown.png`) to `@react-pdf`'s `<Image src>`. `@react-pdf` resolves a string
+src through `url.parse`, which on Windows reads the `C:` drive letter as a URL **protocol**,
+decides the file is a *remote* URL, and `fetch()`es it — which fails. `@react-pdf` swallows
+the broken-image error, so the PDF still rendered, just **without the logo**. (Linux/serverless
+paths start with `/` and were unaffected, so deploys worked; only local Windows dev broke.)
+
+- `src/lib/pdf/CostSheetPdf.tsx` & `src/lib/pdf/ProformaInvoicePdf.tsx` — read `Brown.png` into
+  a `Buffer` once (`fs.readFileSync`, lazy) and hand the Buffer to `<Image>`. A Buffer src
+  bypasses URL parsing entirely, so it works on both Windows and serverless.
+
+The HTML print "View" was never affected (the browser resolves `src="/Brown.png"` at the app
+origin).
+
+**Verification:** `npm run build` clean. Standalone `renderToBuffer` test — string-path render
+produced a 1,174-byte PDF with no embedded image ("fetch failed"); Buffer render produced a
+28,755-byte PDF with the `/Image` XObject embedded.
+
+> **Deploy note:** `public/Brown.png` is currently **untracked in git**. It must be committed,
+> or both the HTML view (404) and the PDFs (`readFileSync` throws) will lack the logo in any
+> deployed/CI build.
+
+## Task 21 — Brand logo on the Booking Voucher (general bookings)
+
+Extended the Task 19 logo to the guest-facing **Booking Voucher** so it matches the corporate
+Cost Sheet / PI. The typed `BAGHAAN` title + `ORCHARD · RETREAT` subtitle is **replaced** by the
+`public/Brown.png` wordmark (the logo already contains the name); address / phone lines stay below.
+
+- `src/lib/pdf/VoucherPdf.tsx` — render the logo via `@react-pdf`'s `<Image>`, reading
+  `Brown.png` into a `Buffer` (lazy, once) — same Windows-safe approach as Task 20.
+- `src/lib/utils/print.ts` — `buildVoucherHTML`: swapped the `<h1>`/`.sub` text for
+  `<img class="logo" src="/Brown.png">` and added a `.header .logo` CSS rule (height-capped, centred).
+- `next.config.ts` — added `./public/Brown.png` to `outputFileTracingIncludes` for `/api/pdf/voucher`.
+- `src/lib/server/voucher-pdf-store.tsx` — voucher PDFs are content-addressed by booking data only,
+  so a template change wouldn't invalidate already-cached objects. Added a `v: 2` template-version
+  field to the fingerprint so every voucher regenerates with the logo (and stale objects are pruned).
+
+**Verification:** `npm run build` clean. (Buffer-image rendering itself was proven in Task 20.)

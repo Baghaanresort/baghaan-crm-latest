@@ -1,4 +1,6 @@
-import { Document, Page, View, Text, StyleSheet } from '@react-pdf/renderer';
+import fs from 'node:fs';
+import path from 'node:path';
+import { Document, Page, View, Text, Image, StyleSheet } from '@react-pdf/renderer';
 import type { Booking } from '@/lib/types/booking';
 import type { Payment } from '@/lib/types/payment';
 import { fmtDate } from '@/lib/utils/date';
@@ -7,6 +9,14 @@ import { registerPdfFonts } from './registerFonts';
 import { styles as base, colors } from './theme';
 
 registerPdfFonts();
+
+// Brand logo (public/Brown.png), traced into the voucher PDF route via
+// next.config's outputFileTracingIncludes. Read into a Buffer (lazily, once) and
+// handed straight to <Image>: passing an absolute path *string* breaks on Windows,
+// where @react-pdf's url.parse reads the "C:" drive letter as a URL protocol and
+// tries to fetch it as a remote URL.
+let logoData: Buffer | undefined;
+const logoSrc = () => (logoData ??= fs.readFileSync(path.join(process.cwd(), 'public', 'Brown.png')));
 
 const inr = (n: number) => `Rs. ${Math.round(Number(n) || 0).toLocaleString('en-IN')}`;
 
@@ -58,8 +68,7 @@ export function VoucherPdf({ booking: b, payments = [] }: VoucherPdfProps) {
         )}
 
         <View style={base.header}>
-          <Text style={base.brand}>BAGHAAN</Text>
-          <Text style={base.brandSub}>ORCHARD · RETREAT</Text>
+          <Image style={base.logo} src={logoSrc()} />
           <Text style={base.brandLine}>Village - Kachrot, Garhmukteshwar, Uttar Pradesh</Text>
           <Text style={base.brandLine}>Telephone: 07599053402, 09410083460</Text>
         </View>

@@ -15,8 +15,9 @@ const config: NextConfig = {
   // Ensure the bundled PDF font TTFs are traced into the corporate PDF routes
   // when deployed to serverless (Vercel/Netlify).
   outputFileTracingIncludes: {
-    '/api/pdf/cost-sheet': ['./src/lib/pdf/fonts/**'],
-    '/api/pdf/pi': ['./src/lib/pdf/fonts/**'],
+    '/api/pdf/cost-sheet': ['./src/lib/pdf/fonts/**', './public/Brown.png'],
+    '/api/pdf/pi': ['./src/lib/pdf/fonts/**', './public/Brown.png'],
+    '/api/pdf/voucher': ['./src/lib/pdf/fonts/**', './public/Brown.png'],
   },
 };
 
